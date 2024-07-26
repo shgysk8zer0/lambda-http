@@ -1,25 +1,35 @@
 import nodeResolve from '@rollup/plugin-node-resolve';
-import terser from '@rollup/plugin-terser';
 
 export default [{
-	input: 'index.js',
+	input: 'lambda-http.js',
 	plugins: [nodeResolve()],
-	output: [{
-		file: 'index.cjs',
-		format: 'cjs',
-	}, {
-		file: 'index.min.js',
-		format: 'iife',
-		plugins: [terser()],
-		sourcemap: true,
-	}, {
-		file: 'index.mjs',
-		format: 'module',
-	}],
-}, {
-	input: 'consts.js',
 	output: {
-		file: 'consts.cjs',
+		file: 'lambda-http.cjs',
+		format: 'cjs',
+	},
+}, {
+	input: 'error.js',
+	plugins: [nodeResolve()],
+	output: {
+		file: 'error.cjs',
+		format: 'cjs',
+	},
+}, {
+	input: 'mimes.js',
+	output: {
+		file: 'mimes.cjs',
+		format: 'cjs',
+	}
+}, {
+	input: 'status.js',
+	output: {
+		file: 'status.cjs',
+		format: 'cjs',
+	}
+}, {
+	input: 'handler.js',
+	output: {
+		file: 'handler.cjs',
 		format: 'cjs',
 	}
 }];

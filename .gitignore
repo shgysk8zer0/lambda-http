@@ -1,4 +1,6 @@
+.netlify/
 *.cjs
+!api/*.cjs
 *.mjs
 *.min.*
 *.map
