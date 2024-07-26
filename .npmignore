@@ -1,4 +1,8 @@
 node_modules/
+.netlify/
+api/
+tests/
+netlify.toml
 .github/
 .editorconfig
 .eslintignore
