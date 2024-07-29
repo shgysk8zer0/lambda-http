@@ -11,15 +11,13 @@ export default createHandler({
 		}
 	}
 }, {
-	allowOrigins: ['http://localhost:9999'],
+	allowOrigins: ['http://localhost:9999', 'http://localhost:8080'],
 	allowHeaders: ['X-Foo'],
 	exposeHeaders: ['X-Foo'],
 	allowCredentials: true,
-	logger(err, req) {
-		if (err.cause instanceof Error) {
-			console.log(`<${req.url}> - ${err.message} [cause: "${err.cause.message}"]`);
-		} else {
-			console.log(`<${req.url}> - ${err.message}`);
+	logger(err) {
+		if (! (err instanceof HTTPError)) {
+			console.error(err);
 		}
-	}
+	},
 });

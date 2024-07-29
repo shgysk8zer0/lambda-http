@@ -1,5 +1,6 @@
 import { HTTPError } from './error.js';
 import { METHOD_NOT_ALLOWED, INTERNAL_SERVER_ERROR, NO_CONTENT, FORBIDDEN } from './status.js';
+import { isSameOriginRequest } from './utils.js';
 
 const ACAO = 'Access-Control-Allow-Origin';
 // const ACRM = 'Access-Control-Request-Method';
@@ -10,10 +11,11 @@ const ACEH = 'Access-Control-Expose-Headers';
 
 export function createOptionsHandler(methods) {
 	return async function() {
-		const allow = [...methods, 'options'];
+		const allow = [...methods, 'options'].join(', ').toUpperCase();
+
 		const headers = new Headers({
-			Allow: allow.join(', ').toUpperCase(),
-			[ACAH]: allow.join(', ').toUpperCase(),
+			Allow: allow,
+			[ACAH]: allow,
 		});
 
 		return new Response(null, { headers, status: NO_CONTENT });
@@ -22,19 +24,16 @@ export function createOptionsHandler(methods) {
 
 function addCorsHeaders(resp, req, { allowHeaders, allowCredentials, exposeHeaders } = {}) {
 	try {
-		if (req.headers.has('Origin') && URL.canParse(req.headers.get('Origin'))) {
+		if (req.headers.has('Origin')) {
+			const origin = URL.parse(req.headers.get('Origin'))?.origin;
+
 			if (allowCredentials && ! resp.headers.has(ACAC)) {
 				resp.headers.set(ACAC, 'true');
 			}
 
-
-			if (resp.headers.has(ACAC) && (! resp.headers.has(ACAO) || resp.headers.get(ACAO) === '*')) {
-				resp.headers.set(ACAO, req.headers.get('Origin'));
-			}
-
-			if (resp.headers.has(ACAC) && ! resp.headers.has(ACAO)) {
-				resp.headers.set(ACAO, req.headers.get('Origin'));
-			} else {
+			if (resp.headers.has(ACAC) && ! resp.headers.has(ACAO) || resp.headers.get(ACAO) === '*') {
+				resp.headers.set(ACAO, origin);
+			} else if (! resp.headers.has(ACAO)) {
 				resp.headers.set(ACAO, '*');
 			}
 
@@ -59,20 +58,24 @@ function addCorsHeaders(resp, req, { allowHeaders, allowCredentials, exposeHeade
 }
 
 export function isAllowedOrigin(req, allowOrigins) {
+	const origin = req.headers.has('Origin')
+		? URL.parse(req.headers.get('Origin'))?.origin ?? null
+		: null;
+
 	switch(typeof allowOrigins) {
 		case 'undefined':
 			return true;
 
 		case 'string':
-			return allowOrigins === '*' || req.headers.get('Origin') === allowOrigins;
+			return allowOrigins === '*' || origin === allowOrigins;
 
 		case 'object':
 			return Array.isArray(allowOrigins)
-				&& req.headers.has('Origin' )
+				&& typeof origin === 'string'
 				&& (
-					(allowOrigins.includes('*') || allowOrigins.includes(req.headers.get('Origin')))
+					(allowOrigins.includes('*') || allowOrigins.includes(origin))
 				) || (allowOrigins instanceof Set
-						&& (allowOrigins instanceof Set && allowOrigins.has('*') ||allowOrigins.has(req.headers.get('Origin'))));
+						&& (allowOrigins instanceof Set && allowOrigins.has('*') || allowOrigins.has(origin)));
 	}
 }
 
@@ -117,7 +120,8 @@ export function createHandler(handlers, {
 			if (! req instanceof Request) {
 				throw new TypeError('Not a Request object.');
 			} else if (
-				Array.isArray(allowOrigins) && allowOrigins.length !== 0
+				! isSameOriginRequest(req)
+				&& Array.isArray(allowOrigins) && allowOrigins.length !== 0
 				&& ! isAllowedOrigin(req, allowOrigins)
 			) {
 				throw new HTTPError(`Disallowed Origin: ${req.headers.get('Origin')}.`, FORBIDDEN);
