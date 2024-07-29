@@ -1,9 +1,10 @@
+import '../polyfills.js';
 import echo from '../api/echo.js';
 import error from '../api/error.js';
 
 const headers = new Headers({
 	Accept: 'application/json',
-	Origin: 'http://localhost:9999',
+	Origin: 'http://localhost:8080',
 });
 
 await Promise.all([

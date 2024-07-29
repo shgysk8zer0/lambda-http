@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.1] - 2024-07-29
+
+### Added
+- Add Same-Origin & Cross-Origin (CORS) helper functions
+- Add module bundle (`lambda-http.mjs`)
+
 ## [v1.0.0] - 2024-07-26
 
 Initial Release

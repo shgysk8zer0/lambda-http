@@ -3,10 +3,13 @@ import nodeResolve from '@rollup/plugin-node-resolve';
 export default [{
 	input: 'lambda-http.js',
 	plugins: [nodeResolve()],
-	output: {
+	output: [{
+		file: 'lambda-http.mjs',
+		format: 'module',
+	}, {
 		file: 'lambda-http.cjs',
 		format: 'cjs',
-	},
+	}],
 }, {
 	input: 'error.js',
 	plugins: [nodeResolve()],
