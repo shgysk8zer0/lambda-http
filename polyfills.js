@@ -14,6 +14,24 @@ if (! (URL.canParse instanceof Function)) {
 	};
 }
 
+if (! (Object.groupBy instanceof Function)) {
+	Object.groupBy = function groupBy(arr, callback) {
+		const result = {};
+
+		for (let i = 0; i < arr.length; i++) {
+			const key = callback.call(null, arr[i], i, arr);
+
+			if (key in result) {
+				result[key].push(arr[i]);
+			} else {
+				result[key] = [arr[i]];
+			}
+		}
+
+		return result;
+	};
+}
+
 if ('Blob' in globalThis && ! ('File' in globalThis)) {
 	globalThis.File = class File extends Blob {
 		#name;

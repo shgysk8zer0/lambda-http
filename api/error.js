@@ -1,3 +1,4 @@
+import '@shgysk8zer0/lambda-http/polyfills.js';
 import { createHandler } from '@shgysk8zer0/lambda-http/handler.js';
 import { HTTPError } from '@shgysk8zer0/lambda-http/error.js';
 import { BAD_GATEWAY } from '@shgysk8zer0/lambda-http/status.js';
@@ -14,10 +15,10 @@ export default createHandler({
 	allowOrigins: ['http://localhost:9999', 'http://localhost:8080'],
 	allowHeaders: ['X-Foo'],
 	exposeHeaders: ['X-Foo'],
-	allowCredentials: true,
-	logger(err) {
-		if (! (err instanceof HTTPError)) {
-			console.error(err);
-		}
-	},
+	// allowCredentials: true,
+	// logger(err) {
+	// 	if (! (err instanceof HTTPError)) {
+	// 		console.error(err);
+	// 	}
+	// },
 });

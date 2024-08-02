@@ -3,6 +3,8 @@
 // import { FORM_MULTIPART, FORM_URL_ENCODED, JSON as JSON_MIME, TEXT } from '@shgysk8zer0/lambda-http/mimes.js';
 
 import { createHandler, MIME } from '@shgysk8zer0/lambda-http/lambda-http.mjs';
+import { HTTPError } from '../error.js';
+import { NOT_ACCEPTABLE } from '../status.js';
 
 async function getBody(req) {
 	Headers.prototype.toJSON = function() {
@@ -44,8 +46,11 @@ async function getBody(req) {
 	}
 }
 
-async function createResponse(req) {
-	this?.cookies?.set({
+async function createResponse(req, context) {
+	if (req.headers.has('Content-Type') && req.headers.get('Content-Type') !== 'application/json') {
+		throw new HTTPError(`Does not support "${req.headers.get('Content-Type')}"`, NOT_ACCEPTABLE);
+	}
+	context?.cookies?.set({
 		name: 'foo',
 		value: 'bar',
 		expires: Date.now() + (3_600_00 * 24),
@@ -59,8 +64,6 @@ async function createResponse(req) {
 		method: req.method,
 		headers: Object.fromEntries(req.headers),
 		body: await getBody(req),
-	}, {
-		headers: new Headers({ 'Access-Control-Allow-Origin': 'http://locahost:9999' })
 	});
 }
 
@@ -71,9 +74,10 @@ export default createHandler(Object.fromEntries([
 		return new Response(blob);
 	}],
 ]), {
-	allowOrigins: ['*'],
+	allowOrigins: ['http://localhost:9999', 'http://localhost:8888'],
 	allowCredentials: true,
-	logger(err, req) {
-		console.error({ err, req });
-	}
+	requireCORS: true,
+	// logger(err, req) {
+	// 	console.error({ err, req });
+	// }
 });
