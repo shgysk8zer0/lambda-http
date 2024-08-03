@@ -1,7 +1,21 @@
 import { contextFallback as context } from './context.js';
-import { METHOD_NOT_ALLOWED } from './status.js';
+import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT } from './status.js';
 
-const REDIRECT_STATUSES = [301, 302, 303, 307, 308];
+const REDIRECT_STATUSES = [MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT];
+
+function getHandlerModule() {
+	return async function(req) {
+		const base = 'process' in globalThis && process.cwd instanceof Function ? 'file://' + process.cwd() + '/' : document?.baseURI;
+		const path = new URL(req.url, base).pathname;
+		const module = await import(base  + path.substring(1) + '.js');
+
+		if (! (module.default instanceof Function)) {
+			throw new Error(`Module at ${path} does not export a default handler function.`);
+		} else {
+			return await module.default.call(context, req, context);
+		}
+	};
+}
 
 /**
  * Represents a test case for a request handler function.
@@ -16,8 +30,7 @@ export class RequestHandlerTest {
 	/**
 	 * Creates a new RequestHandlerTest instance.
 	 *
-	 * @param {Request} request - The Request object to use for the test.
-	 * @param {Function|string|URL} handler - The request handler function to test or path to the module, relative to current working directory.
+	 * @param {Request} request - The Request object to use for the test, with the handler defined by the pathname of the Request URL.
 	 * @param {AssertionCallback|AssertionCallback[]} [assertionsCallback] - Optional callback function(s) to perform assertions on the response.
 	 *
 	 * @callback AssertionCallback
@@ -31,30 +44,14 @@ export class RequestHandlerTest {
 	 *   - `undefined` or `null`: Assertion passed (no explicit return value)
 	 */
 
-	constructor(request, handler, assertionsCallback) {
+	constructor(request, assertionsCallback) {
 		if (!(request instanceof Request)) {
 			this.#errors.push(new TypeError('Test request is not a Request object.'));
 		} else {
 			this.#request = request;
 		}
 
-		if (typeof handler === 'string' || handler instanceof URL) {
-			this.#handler = async (request, context) => {
-				const base = 'process' in globalThis && process.cwd instanceof Function ? 'file://' + process.cwd() + '/' : document?.baseURI;
-				const path = new URL(handler, base);
-				const module = await import(path);
-
-				if (! (module.default instanceof Function)) {
-					throw new Error(`Module at ${path} does not export a handler as default.`);
-				} else {
-					return module.default.call(context, request, context);
-				}
-			};
-		} else if (!(handler instanceof Function)) {
-			this.#errors.push(new TypeError('Test handler must be a Function.'));
-		} else {
-			this.#handler = handler;
-		}
+		this.#handler = getHandlerModule(request);
 
 		if (Array.isArray(assertionsCallback) && assertionsCallback.length !== 0) {
 			this.#assertionsCallback = async (resp, req) => {
@@ -408,24 +405,60 @@ export class RequestHandlerTest {
 		return { success, error: errors.length === 0 ? null : new AggregateError(errors, 'Some tests failed.') };
 	}
 
+	/**
+	 * Asserts that a Response object has a successful (2xx) HTTP status code.
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the response does not have a 2xx status code.
+	 */
 	static shouldBeOk(resp, req) {
 		if (! resp.ok) {
 			throw new Error(`${req.method} <${req.url}> should return a 2xx status code. Got ${resp.status}.`);
 		}
 	}
 
+	/**
+	 * Asserts that a Response object has a client (4xx) or server (5xx) error status code.
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the response does not have a 4xx or 5xx status code.
+	 */
+	static shouldError(resp, req) {
+		if (resp.status < 400 || resp.status > 599) {
+			throw new Error(`${req.method} <${req.url}> should return a 4xx or 5xx status code. Got ${resp.status}.`);
+		}
+	}
+
+	/**
+	 * Asserts that a Response object has a client (4xx) error status code.
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the response does not have a 4xx status code.
+	 */
 	static shouldClientError(resp, req) {
 		if (resp.status < 400 || resp.status > 499) {
 			throw new Error(`${req.method} <${req.url}> should return a 4xx status code. Got ${resp.status}.`);
 		}
 	}
 
+	/**
+	 * Asserts that a Response object has a server (5xx) error status code.
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the response does not have a 5xx status code.
+	 */
 	static shouldServerError(resp, req) {
 		if (resp.status < 500 || resp.status > 599) {
 			throw new Error(`${req.method} <${req.url}> should return a 5xx status code. Got ${resp.status}.`);
 		}
 	}
 
+	/**
+	 * Asserts that a Response object indicates a redirect (3xx status code) and includes a Location header.
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the response does not have a 3xx status code or is missing the Location header.
+	 */
 	static shouldRedirect(resp, req) {
 		if (resp.status < 300 || resp.status > 399) {
 			throw new Error(`${req.method} <${req.url}> should have a 3xx status code, but got ${resp.status}.`);
@@ -434,6 +467,12 @@ export class RequestHandlerTest {
 		}
 	}
 
+	/**
+	 * Asserts that a Response object includes an Access-Control-Allow-Origin header allowing the request's origin, or '*'.
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the Access-Control-Allow-Origin header is missing or does not allow the request's origin.
+	 */
 	static async shouldAllowOrigin(resp, req) {
 		if (! resp.headers.has('Access-Control-Allow-Origin')) {
 			throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Origin header.`);
@@ -446,6 +485,12 @@ export class RequestHandlerTest {
 		}
 	}
 
+	/**
+	 * Asserts that a Response object DOES NOT allow a specific Origin
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the Access-Control-Allow-Origin header is missing or allows the request's origin.
+	 */
 	static async shouldDisallowOrigin(resp, req) {
 		if (resp.headers.has('Access-Control-Allow-Origin')) {
 			const origin = req.headers.get('Origin');
@@ -456,24 +501,50 @@ export class RequestHandlerTest {
 		}
 	}
 
+	/**
+	 * Asserts that a Response to an OPTIONS request includes the Access-Control-Allow-Methods header.
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the Access-Control-Allow-Methods header is missing in an OPTIONS request.
+	 */
 	static async shouldSupportOptionsMethod(resp, req) {
 		if (! resp.headers.has('Access-Control-Allow-Methods')) {
 			throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Methods in OPTIONS request.`);
 		}
 	}
 
+	/**
+	 * Asserts that a Response object does not indicate that the HTTP method used in the request is not allowed (405 Method Not Allowed).
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the response status is 405 Method Not Allowed.
+	 */
 	static async shouldAllowMethod(resp, req) {
 		if (resp.status === METHOD_NOT_ALLOWED) {
 			throw new Error(`${req.method} <${req.url}> should support HTTP method "${req.method}."`);
 		}
 	}
 
+	/**
+	 * Asserts that a Response object indicates that the HTTP method used in the request is not allowed (405 Method Not Allowed).
+	 * @param {Response} resp The Response object to check.
+	 * @param {Request} req The Request object associated with the response.
+	 * @throws {Error} If the response status is not 405 Method Not Allowed.
+	 */
 	static async shouldNotAllowMethod(resp, req) {
 		if (resp.status !== METHOD_NOT_ALLOWED) {
 			throw new Error(`${req.method} <${req.url}> should not support HTTP method "${req.method}."`);
 		}
 	}
 
+	/**
+	 * Assertion function that executes multiple checks against a request and its response.
+	 * @param  {...(Function|string)} checks - An array of check functions or check names.
+	 * Check functions should throw an error if the assertion fails.
+	 * Check names should match the format 'should[CheckName]' where [CheckName]
+	 * corresponds to a static method within RequestHandlerTest.
+	 * @returns {Function} An async function that performs the checks and throws an AggregateError if any fail.
+	 */
 	static should(...checks) {
 		return async function(req, resp) {
 			const errs = [];

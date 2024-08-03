@@ -1,6 +1,7 @@
 const results = await Promise.allSettled([
 	import('./echo.js'),
 	import('./error.js'),
+	import('./page.js'),
 ]);
 
 const errs = [];
