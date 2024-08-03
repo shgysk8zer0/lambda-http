@@ -1,30 +1,19 @@
-import '../polyfills.js';
-import echo from '../api/echo.js';
-import error from '../api/error.js';
+const results = await Promise.allSettled([
+	import('./echo.js'),
+	import('./error.js'),
+	import('./page.js'),
+]);
 
-const headers = new Headers({
-	Accept: 'application/json',
-	Origin: 'http://localhost:8080',
-});
+const errs = [];
 
-await Promise.all([
-	echo(new Request('http://localhost:9999/api/echo', {
-		headers,
-		method: 'GET',
-	})),
-	error(new Request('http://localhost:9999/api/error', {
-		headers,
-		method: 'GET',
-	})),
-]).then(([echo, error]) => {
-	return [echo, error].every(resp => {
-		return resp instanceof Response
-			&& resp.headers.get('Content-Type').startsWith('application/json')
-			&& resp.headers.has('Access-Control-Allow-Origin')
-			&& resp.headers.has('Access-Control-Allow-Credentials');
-	}) && echo.ok && (! error.ok);
-}).then(result => {
-	if (! result) {
-		throw new Error('Error processing requests.');
+for (const result of results) {
+	if (result.status === 'rejected') {
+		errs.push(result.reason);
 	}
-});
+}
+
+if (errs.length === 1) {
+	throw errs[0];
+} else if (errs.length !== 0) {
+	throw new AggregateError(errs, 'Some tests failed.');
+}

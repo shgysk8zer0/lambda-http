@@ -1,6 +1,6 @@
 {
   "name": "@shgysk8zer0/lambda-http",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A collection of node >= 20 utilities for Netlify Functions and AWS Lambda",
   "keywords": [
     "request",
@@ -41,7 +41,7 @@
   },
   "private": false,
   "scripts": {
-    "test": "npm run lint:js && npm run build && npm run tests",
+    "test": "npm run lint:js && npm run tests && npm run build",
     "start": "netlify functions:serve",
     "preversion": "npm test",
     "prepare": "npm run build",

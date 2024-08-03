@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.2] - 2024-08-02
+
+### Added
+- Add testing class with utility methods
+- Add various tests
+
+### Fixed
+- Fix bad support for same-origin requests
+
 ## [v1.0.1] - 2024-07-29
 
 ### Added

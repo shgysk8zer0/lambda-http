@@ -1,10 +1,12 @@
 import { HTTPError } from './error.js';
 import { METHOD_NOT_ALLOWED, INTERNAL_SERVER_ERROR, NO_CONTENT, FORBIDDEN } from './status.js';
 import { isSameOriginRequest } from './utils.js';
+import { contextFallback } from './context.js';
 
 const ACAO = 'Access-Control-Allow-Origin';
 // const ACRM = 'Access-Control-Request-Method';
 const ACAC = 'Access-Control-Allow-Credentials';
+const ACAM = 'Access-Control-Allow-Methods';
 const ACAH = 'Access-Control-Allow-Headers';
 const ACRH = 'Access-Control-Request-Headers';
 const ACEH = 'Access-Control-Expose-Headers';
@@ -15,25 +17,25 @@ export function createOptionsHandler(methods) {
 
 		const headers = new Headers({
 			Allow: allow,
-			[ACAH]: allow,
+			[ACAM]: allow,
 		});
 
 		return new Response(null, { headers, status: NO_CONTENT });
 	};
 }
 
-function addCorsHeaders(resp, req, { allowHeaders, allowCredentials, exposeHeaders } = {}) {
+function addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders } = {}) {
 	try {
-		if (req.headers.has('Origin')) {
+		if (req instanceof Request && req.headers.has('Origin')) {
 			const origin = URL.parse(req.headers.get('Origin'))?.origin;
 
 			if (allowCredentials && ! resp.headers.has(ACAC)) {
 				resp.headers.set(ACAC, 'true');
 			}
 
-			if (resp.headers.has(ACAC) && ! resp.headers.has(ACAO) || resp.headers.get(ACAO) === '*') {
+			if (resp.headers.has(ACAC) && (! resp.headers.has(ACAO) && isAllowedOrigin(req, allowOrigins)) || resp.headers.get(ACAO) === '*') {
 				resp.headers.set(ACAO, origin);
-			} else if (! resp.headers.has(ACAO)) {
+			} else if (!resp.headers.has(ACAO) && (typeof allowOrigins === 'undefined' || isAllowedOrigin(req, allowOrigins))) {
 				resp.headers.set(ACAO, '*');
 			}
 
@@ -99,7 +101,8 @@ export function createHandler(handlers, {
 	allowOrigins,
 	allowCredentials = false,
 	exposeHeaders,
-	logger = err => console.error(err),
+	requireCORS = false,
+	logger,
 } = {}) {
 	if ((typeof handlers !== 'object' || handlers === null)) {
 		throw new TypeError('Handlers must be an object keyed by HTTP method and values of the handler functions.');
@@ -115,12 +118,13 @@ export function createHandler(handlers, {
 		handlers.options = createOptionsHandler(methods, { allowHeaders, allowOrigins });
 	}
 
-	return async (req, context = Object.freeze({})) => {
+	return async (req, context = contextFallback) => {
 		try {
-			if (! req instanceof Request) {
+			if (! (req instanceof Request)) {
 				throw new TypeError('Not a Request object.');
 			} else if (
-				! isSameOriginRequest(req)
+				requireCORS
+				&& ! isSameOriginRequest(req)
 				&& Array.isArray(allowOrigins) && allowOrigins.length !== 0
 				&& ! isAllowedOrigin(req, allowOrigins)
 			) {
@@ -133,22 +137,20 @@ export function createHandler(handlers, {
 				const resp = await handlers[req.method.toLowerCase()].call(context, req, context);
 
 				if (resp instanceof Response) {
-					addCorsHeaders(resp, req, { allowHeaders, allowCredentials, exposeHeaders });
+					addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
 					return resp;
 				} else {
 					throw new HTTPError('Invalid response.', INTERNAL_SERVER_ERROR);
 				}
 			}
 		} catch (err) {
-			logger instanceof Function
-				? logger.call(context, err, req, context)
-				: console.error(err);
+			if (logger instanceof Function) {
+				logger.call(context, err, req, context);
+			}
 
 			if (err instanceof HTTPError) {
 				const resp = Response.json(err, { status: err.status, headers: new Headers(err.headers) });
-				addCorsHeaders(resp, req, { allowHeaders, allowCredentials, exposeHeaders });
-
-				return resp;
+				return addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
 			} else {
 				const resp = Response.json({
 					error: {
@@ -157,10 +159,10 @@ export function createHandler(handlers, {
 					}
 				}, {
 					status: INTERNAL_SERVER_ERROR,
-					headers: req.headers.has('Origin') ? new Headers({ [ACAO]: '*' }) : undefined,
+					headers: new Headers({ [ACAO]: '*' }),
 				});
 
-				return addCorsHeaders(resp, req, { allowHeaders, allowCredentials, exposeHeaders });
+				return addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
 			}
 		}
 	};
