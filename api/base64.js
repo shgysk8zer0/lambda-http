@@ -1,6 +1,6 @@
 import { createHandler } from '../handler.js';
-import { HTTPError } from '../error.js';
-import { BAD_REQUEST } from '../status.js';
+import { HTTPError } from '@shgysk8zer0/consts/error.js';
+import { BAD_REQUEST } from '@shgysk8zer0/consts/status.js';
 
 async function base64Encode(blob) {
 	const bytes = await blob.bytes();
