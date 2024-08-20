@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html land="en" dir="ltr">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="color-scheme" content="{{ THEME }}" />
+		<base href="{{ BASE }}" />
+		<title>{{ TITLE }}</title>
+		<script src="{{ BASE }}polyfills" referrerpolicy="no-referrer" crossorigin="anonymous" defer=""></script>
+		<script src="{{ BASE }}script" defer=""></script>
+		<script type="application/json" id="req">{{ REQUEST }}</script>
+		<script nonce="{{ NONCE }}">
+			document.addEventListener('DOMContentLoaded', () => {
+				document.forms.base64.addEventListener('submit', async event => {
+					event.preventDefault();
+					const data = new FormData(event.target);
+					const file = data.get('file');
+
+					const resp = await fetch('{{ BASE }}base64', {
+						method: 'PUT',
+						headers: { Accept: 'text/plain' },
+						body: file,
+					});
+
+					const encoded = await resp.text();
+					document.getElementById('encoded').textContent = encoded;
+				})
+			})
+		</script>
+	</head>
+	<body>
+		<p>{{ MESSAGE }}</p>
+		<p>Last updated: <time datetime="{{ TIMESTAMP }}">{{ DATE }}</time></p>
+		<div><a href="{{ BASE }}echo">Test Echo</a></div>
+		<iframe src="{{ BASE }}echo" referrerpolicy="origin" sandbox="" credentialless="" width="600" height="800"></iframe>
+		<pre><code>{{ REQUEST }}</code></pre>
+		<pre><code>{{ JSON }}</code></pre>
+		<img src="{{ BASE }}svg" referrerpolicy="no-referrer" />
+		<form method="post" action="{{ BASE }}echo" rel="noreferrer" target="_blank" enctype="multipart/form-data">
+			<fieldset>
+				<legend>Form Test</legend>
+				<div>
+					<label for="name">Name</label>
+					<input type="text" name="name" id="name" autocomplete="name" placeholder="Full Name" required="" />
+				</div>
+				<div>
+					<label for="email">Email</label>
+					<input type="email" name="email" id="email" autocomplete="email" placeholder="user@example.com" required="" />
+				</div>
+				<div>
+					<label for="tel">Phone</label>
+					<input type="tel" name="tel" id="tel" autocomplete="tel" placeholder="+1-555-555-5555" required="" />
+				</div>
+				<div>
+					<label for="file">Upload</label>
+					<input type="file" name="file" id="file" accept="image/*" />
+				</div>
+			</fieldset>
+			<div>
+				<button type="submit">Submit</button>
+				<button type="reset">Reset</button>
+			</div>
+		</form>
+		<form id="base64" action="{{ BASE }}base64" method="post" enctype="multipart/form-data" target="_blank">
+			<div>
+				<label for="upload">Base64 Encode a file</label>
+				<input type="file" name="file" id="upload" required="" />
+			</div>
+			<div>
+				<button type="submit">Encode</button>
+				<button type="reset">Reset</button>
+			</div>
+			<div>
+				<output for="upload" id="encoded"></output>
+			</div>
+		</form>
+	</body>
+</html>
