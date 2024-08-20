@@ -1,9 +1,14 @@
-import './polyfills.js';
+import '@shgysk8zer0/polyfills';
 import { createHandler } from './handler.js';
-import * as HTTP_STATUS from './status.js';
-import * as MIME from './mimes.js';
+import * as HTTP_STATUS from '@shgysk8zer0/consts/status.js';
+import * as MIME from '@shgysk8zer0/consts/mimes.js';
 
-export { isJSONRequest, isFormDataRequest, isCORSRequest, isSameOriginRequest, getOriginOrReferrer, getContentType } from './utils.js';
-export { RequestHandlerTest } from './RequestHandlerTest.js';
+export * from './handler.js';
+export * from './utils.js';
+export * from './RequestHandlerTest.js';
+export* from './document.js';
+export * from './cookies.js';
+export * from './NetlifyRequest.js';
+export * from './error.js';
 export { createHandler, HTTP_STATUS, MIME };
 export default createHandler;

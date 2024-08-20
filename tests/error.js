@@ -1,5 +1,6 @@
 import { RequestHandlerTest } from '../RequestHandlerTest.js';
-import { METHOD_NOT_ALLOWED } from '../status.js';
+import { NOT_FOUND } from '@shgysk8zer0/consts/status.js';
+// import { METHOD_NOT_ALLOWED } from '../status.js';
 
 const url = 'http://localhost:8888/api/error';
 const headers = new Headers({ Accept: 'application/json', Origin: 'http://localhost:9999' });
@@ -7,32 +8,33 @@ const headers = new Headers({ Accept: 'application/json', Origin: 'http://localh
 const { error } = await RequestHandlerTest.runTests(
 	new RequestHandlerTest(
 		new Request(url, { headers }),
-		async (resp) => {
-			if (resp.status < 500) {
-				throw new Error('Response should return an error status.');
-			}
-		}
+		[RequestHandlerTest.shouldHaveValidStatus, RequestHandlerTest.shouldServerError, RequestHandlerTest.shouldBeJSON]
 	),
 	new RequestHandlerTest(
 		new Request(url, { method: 'DELETE', headers }),
-		resp => {
-			if (resp.status !== METHOD_NOT_ALLOWED) {
-				throw new Error('Endpoint should report not supporting the DELETE method.');
-			}
-		}
+		RequestHandlerTest.shouldNotAllowMethod
+	),
+	new RequestHandlerTest(
+		new Request(url, { headers: { Accept: 'text/plain' }}),
+		RequestHandlerTest.shouldNotAccept,
 	),
 	new RequestHandlerTest(
 		new Request(url, {
 			method: 'OPTIONS',
 			headers: new Headers({ 'Access-Control-Request-Method': 'GET', Origin: 'http://localhost:9999' }),
 		}),
-		resp => {
-			if (! resp.ok) {
-				throw new Error('Response should not be an error status.');
-			} else if (!resp.headers.has('Access-Control-Allow-Methods')) {
-				throw new Error('Missing "Access-Control-Allow-Methods" header.');
-			}
-		}
+		[RequestHandlerTest.shouldSupportOptionsMethod]
+	),
+	new RequestHandlerTest(
+		new Request(new URL('./dne', url)),
+		RequestHandlerTest.shouldHaveStatus(NOT_FOUND)
+	),
+	new RequestHandlerTest(
+		new Request(url, {
+			method: 'OPTIONS',
+			headers: { ...headers, 'Access-Control-Request-Method': 'PATCH' },
+		}),
+		RequestHandlerTest.shouldNotAllowMethod,
 	)
 );
 

@@ -1,16 +1,24 @@
+import '@shgysk8zer0/polyfills';
 import { contextFallback as context } from './context.js';
-import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT } from './status.js';
+import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT, NOT_ACCEPTABLE, NOT_FOUND, INTERNAL_SERVER_ERROR } from '@shgysk8zer0/consts/status.js';
+import { NetlifyRequest } from './NetlifyRequest.js';
+import { HTML, JSON as JSON_MIME } from '@shgysk8zer0/consts/mimes.js';
+import { HTTPError } from './error.js';
 
 const REDIRECT_STATUSES = [MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT];
 
 function getHandlerModule() {
 	return async function(req) {
-		const base = 'process' in globalThis && process.cwd instanceof Function ? 'file://' + process.cwd() + '/' : document?.baseURI;
+		const base = 'process' in globalThis && process.cwd instanceof Function ? 'file://' + process.cwd() + '/' : globalThis.document?.baseURI;
 		const path = new URL(req.url, base).pathname;
-		const module = await import(base  + path.substring(1) + '.js');
+		const module = await import(base  + path.substring(1) + '.js').catch(() => {
+			return new HTTPError(`Error loading module for <${req.url}>`, NOT_FOUND).response;
+		});
 
-		if (! (module.default instanceof Function)) {
-			throw new Error(`Module at ${path} does not export a default handler function.`);
+		if (module instanceof Response) {
+			return module;
+		} else if (! (module.default instanceof Function)) {
+			return new HTTPError(`Module at ${path} does not export a default handler function.`, INTERNAL_SERVER_ERROR).response();
 		} else {
 			return await module.default.call(context, req, context);
 		}
@@ -30,12 +38,12 @@ export class RequestHandlerTest {
 	/**
 	 * Creates a new RequestHandlerTest instance.
 	 *
-	 * @param {Request} request - The Request object to use for the test, with the handler defined by the pathname of the Request URL.
+	 * @param {NetlifyRequest} request - The Request object to use for the test, with the handler defined by the pathname of the Request URL.
 	 * @param {AssertionCallback|AssertionCallback[]} [assertionsCallback] - Optional callback function(s) to perform assertions on the response.
 	 *
 	 * @callback AssertionCallback
 	 * @param {Response} response - The Response object returned by the handler.
-	 * @param {Request} request - The original Request object used for the test.
+	 * @param {NetlifyRequest} request - The original Request object used for the test.
 	 * @returns {(boolean|string|Error|undefined|null)} A value indicating the result of the assertion:
 	 *   - `true`: Assertion passed
 	 *   - `false`: Assertion failed
@@ -47,6 +55,8 @@ export class RequestHandlerTest {
 	constructor(request, assertionsCallback) {
 		if (!(request instanceof Request)) {
 			this.#errors.push(new TypeError('Test request is not a Request object.'));
+		} else if (! (request instanceof NetlifyRequest)) {
+			this.#request = new NetlifyRequest(request, context);
 		} else {
 			this.#request = request;
 		}
@@ -66,7 +76,13 @@ export class RequestHandlerTest {
 
 				for (const result of results) {
 					if (result.status === 'rejected') {
-						errs.push(result.reason);
+						if (result.reason instanceof AggregateError) {
+							errs.push(...result.reason.errors);
+						} else if (result.reason instanceof Error) {
+							errs.push(result.reason);
+						} else {
+							errs.push(new Error(result.reason));
+						}
 					}
 				}
 
@@ -101,7 +117,7 @@ export class RequestHandlerTest {
 
 	/**
 	 * Gets the Request object upon which tests will be performed.
-	 * @returns {Request} The Request object upon which tests will be performed.
+	 * @returns {NetlifyRequest} The Request object upon which tests will be performed.
 	 */
 	get request() {
 		return this.#request;
@@ -282,7 +298,9 @@ export class RequestHandlerTest {
 				console.info(`Testing ${this.#request.method} <${this.#request.url}>`);
 				const result = await this.#handler.call(context, this.#request, context);
 
-				if (result instanceof Error) {
+				if (result instanceof AggregateError && result.errors.length !== 0) {
+					this.#errors.push(...result.errors);
+				} else if (result instanceof Error) {
 					this.#errors.push(result);
 				} else if (! (result instanceof Response)) {
 					this.#errors.push(new TypeError('Handler did not return a Response object or error.'));
@@ -299,6 +317,8 @@ export class RequestHandlerTest {
 						this.#response = result;
 					} else if (typeof assertResult === 'string') {
 						this.#errors.push(new Error(assertResult));
+					} else if (assertResult instanceof AggregateError) {
+						this.#errors.push(...assertResult.errors);
 					} else if (assertResult instanceof Error) {
 						this.#errors.push(result);
 					} else {
@@ -308,7 +328,13 @@ export class RequestHandlerTest {
 					this.#response = result;
 				}
 			} catch (err) {
-				this.#errors.push(err);
+				if (err instanceof AggregateError) {
+					this.#errors.push(...err.errors);
+				} else if (err instanceof Error) {
+					this.#errors.push(err);
+				} else {
+					this.#errors.push(new Error(err));
+				}
 			}
 		}
 		// Will already have errors if request or callback are invalid
@@ -396,7 +422,13 @@ export class RequestHandlerTest {
 
 		for (const result of results) {
 			if (result.status === 'rejected') {
-				errors.push(result.reason);
+				if (result.reason instanceof AggregateError) {
+					errors.push(...result.reason.errors);
+				} else if (result.reason instanceof Error) {
+					errors.push(result.reason);
+				} else {
+					errors.push(new Error(result.reason));
+				}
 			} else {
 				success.push(result.value);
 			}
@@ -406,9 +438,22 @@ export class RequestHandlerTest {
 	}
 
 	/**
+	 * Checks if the response has a valid status code.
+	 *
+	 * @param {Response} resp - The response object.
+	 * @param {NetlifyRequest} req - The Netlify request object.
+	 * @throws {Error} If the response status code is invalid.
+	 */
+	static shouldHaveValidStatus(resp, req) {
+		if (resp.status < 100 || resp.status > 599) {
+			throw new Error(`${req.method} <${req.url}> returned an invalid status code of ${resp.status}.`);
+		}
+	}
+
+	/**
 	 * Asserts that a Response object has a successful (2xx) HTTP status code.
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the response does not have a 2xx status code.
 	 */
 	static shouldBeOk(resp, req) {
@@ -418,9 +463,125 @@ export class RequestHandlerTest {
 	}
 
 	/**
+	 * Throws an error if the response status is NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 *
+	 * @param {Response} resp - The response object.
+	 * @param {NetlifyRequest} req - The Netlify request object.
+	 * @throws {Error} If the response status is NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 */
+	static shouldAccept(resp, req) {
+		if (req.headers.has('Accept') && resp.status === NOT_ACCEPTABLE) {
+			throw new Error(`${req.method } <${req.url}> should accept ${req.headers.get('Accept')}.`);
+		}
+	}
+
+	/**
+	 * Throws an error if the response status is not NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 *
+	 * @param {Response} resp - The response object.
+	 * @param {NetlifyRequest} req - The Netlify request object.
+	 * @throws {Error} If the response status is not NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 */
+	static shouldNotAccept(resp, req) {
+		if (req.headers.has('Accept') && resp.status !== NOT_ACCEPTABLE) {
+			throw new Error(`${req.method } <${req.url}> should not accept ${req.headers.get('Accept')}.`);
+		}
+	}
+
+	/**
+	 * Creates a function that checks if the response has a specific Content-Type.
+	 *
+	 * @param {string} type - The expected Content-Type.
+	 * @returns {function(Response, NetlifyRequest): void} A function that takes a response and request, and throws an error if the Content-Type is incorrect.
+	 * @throws {Error} If the response lacks a Content-Type header or the Content-Type doesn't match the expected type.
+	 */
+	static shouldHaveContentType(type) {
+		return (resp, req) => {
+			if (! resp.headers.has('Content-Type')) {
+				throw new Error(`${req.method } <${req.url}> should have a Content-Type set.`);
+			} else if (resp.headers.get('Content-Type').toLowerCase().split(';')[0] !== type.toLowerCase() ) {
+				throw new Error(`${req.method } <${req.url}> should have a Content-Type of ${type}} but got ${resp.headers.get('Content-Type')}.`);
+			}
+		};
+	}
+
+	/**
+	 * Creates a function that checks if the response has a specific header.
+	 *
+	 * @param {string} headerName - The name of the expected header.
+	 * @returns {function(Response, NetlifyRequest): void} A function that takes a response and request, and throws an error if the header is missing.
+	 * @throws {Error} If the response lacks the specified header.
+	 */
+	static shouldHaveHeader(headerName) {
+		return (resp, req) => {
+			if (! resp.headers.has(headerName)) {
+				throw new Error(`${req.method } <${req.url}> should have an HTTP header ${headerName} but it was not set.`);
+			}
+		};
+	}
+
+	/**
+	 * Creates a function that checks if the response does not have a specific header.
+	 *
+	 * @param {string} headerName - The name of the unexpected header.
+	 * @returns {function(Response, NetlifyRequest): void} A function that takes a response and request, and throws an error if the header is present.
+	 * @throws {Error} If the response has the specified header.
+	 */
+	static shouldNotHaveHeader(headerName) {
+		return (resp, req) => {
+			if (resp.headers.has(headerName)) {
+				throw new Error(`${req.method } <${req.url}> should not have an HTTP header ${headerName} but it was set.`);
+			}
+		};
+	}
+
+	/**
+	 * Checks if the response is HTML content.
+	 *
+	 * @param {Response} resp - The response object.
+	 * @param {NetlifyRequest} req - The Netlify request object.
+	 * @throws {Error} If the response does not have a Content-Type of 'text/html'.
+	 */
+	static shouldBeHTML(resp, req) {
+		const test = RequestHandlerTest.shouldHaveContentType(HTML);
+		return test(resp, req);
+	}
+
+	/**
+	 * Checks if the response is JSON content.
+	 *
+	 * @param {Response} resp - The response object.
+	 * @param {NetlifyRequest} req - The Netlify request object.
+	 * @throws {Error} If the response does not have a Content-Type of 'application/json' or is not valid JSON.
+	 */
+	static async shouldBeJSON(resp, req) {
+		const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
+		test(resp, req);
+
+		await resp.clone().json().catch(() => {
+			throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
+		});
+	}
+
+	/**
+	 * Creates a function that checks if the response has a specific status code.
+	 *
+	 * @param {number} status - The expected status code.
+	 * @returns {function(Response, NetlifyRequest): void} A function that takes a response and request, and throws an error if the status code is incorrect.
+	 * @throws {Error} If the response status code does not match the expected status.
+	 */
+	static shouldHaveStatus(status) {
+		return (resp, req) => {
+			if (resp.status !== status) {
+				throw new Error(`${req.method } <${req.url}> should have a status code of ${status} but got ${resp.status}}.`);
+			}
+		};
+	}
+
+	/**
 	 * Asserts that a Response object has a client (4xx) or server (5xx) error status code.
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the response does not have a 4xx or 5xx status code.
 	 */
 	static shouldError(resp, req) {
@@ -432,7 +593,7 @@ export class RequestHandlerTest {
 	/**
 	 * Asserts that a Response object has a client (4xx) error status code.
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the response does not have a 4xx status code.
 	 */
 	static shouldClientError(resp, req) {
@@ -444,7 +605,7 @@ export class RequestHandlerTest {
 	/**
 	 * Asserts that a Response object has a server (5xx) error status code.
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the response does not have a 5xx status code.
 	 */
 	static shouldServerError(resp, req) {
@@ -456,24 +617,61 @@ export class RequestHandlerTest {
 	/**
 	 * Asserts that a Response object indicates a redirect (3xx status code) and includes a Location header.
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the response does not have a 3xx status code or is missing the Location header.
 	 */
 	static shouldRedirect(resp, req) {
-		if (resp.status < 300 || resp.status > 399) {
-			throw new Error(`${req.method} <${req.url}> should have a 3xx status code, but got ${resp.status}.`);
+		if (! REDIRECT_STATUSES.includes(resp.status)) {
+			throw new Error(`${req.method} <${req.url}> should have a 3xx redirect status code, but got ${resp.status}.`);
 		} else if (! resp.headers.has('Location')) {
 			throw new Error(`${req.method} <${req.url}> should redirect but is missing the Location HTTP header.`);
+		} else if (! URL.canParse(resp.headers.get('Location'))) {
+			throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - get ${resp.headers.get('Location')}.`);
 		}
+	}
+
+	/**
+	 * Creates a middleware function that checks if a response is a valid redirect.
+	 *
+	 * @param {string|RegExp|URL} [dest] - Optional destination for the redirect.
+	 *   - If a string, the redirect URL must start with this string.
+	 *   - If a RegExp, the redirect URL must match this regular expression.
+	 *   - If a URL, the redirect URL must have the same origin, pathname, and search parameters.
+	 * @returns {function(Response, NetlifyRequest): void} A middleware function that checks the response.
+	 * @throws {Error} If the response status is not a redirect, if the Location header is missing, if the Location header is not a valid URL, or if the destination doesn't match.
+	 */
+	static shouldRedirectTo(dest) {
+		return (resp, req) => {
+			if (! REDIRECT_STATUSES.includes(resp.status)) {
+				throw new Error(`${req.method} <${req.url}> should have a 3xx redirect status code, but got ${resp.status}.`);
+			} else if (! resp.headers.has('Location')) {
+				throw new Error(`${req.method} <${req.url}> should redirect but is missing the Location HTTP header.`);
+			} else if (! URL.canParse(resp.headers.get('Location'))) {
+				throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - get ${resp.headers.get('Location')}.`);
+			} else if (typeof dest === 'string' && ! resp.headers.get('Location').startsWith(dest)) {
+				throw new Error(`${req.method} <${req.url}> should redirect to ${dest} but gave ${resp.headers.get('Location')}.`);
+			} else if (dest instanceof RegExp && ! dest.test(resp.headers.get('Location'))) {
+				throw new Error(`${req.method} <${req.url}> redirected to ${resp.headers.get('Location')}, which does not match ${dest}.`);
+			} else if (dest instanceof URL) {
+				const location = new URL(resp.headers.get('Location'));
+				if (! (
+					location.origin === dest.origin
+					&& location.pathname.startsWith(dest.pathname)
+					&& [...dest.searchParams.keys].every(param => location.searchParams.has(param))
+				)) {
+					throw new Error(`${req.method} <${req.url}> redirects to ${location}, which does not match ${dest}.`);
+				}
+			}
+		};
 	}
 
 	/**
 	 * Asserts that a Response object includes an Access-Control-Allow-Origin header allowing the request's origin, or '*'.
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the Access-Control-Allow-Origin header is missing or does not allow the request's origin.
 	 */
-	static async shouldAllowOrigin(resp, req) {
+	static shouldAllowOrigin(resp, req) {
 		if (! resp.headers.has('Access-Control-Allow-Origin')) {
 			throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Origin header.`);
 		} else if (req.headers.has('Origin')) {
@@ -486,9 +684,26 @@ export class RequestHandlerTest {
 	}
 
 	/**
+	 * Checks if the response requires or allows Same-Origin.
+	 *
+	 * @param {Response} resp - The response object.
+	 * @param {NetlifyRequest} req - The Netlify request object.
+	 * @throws {Error} If the response and request origin mismatch.
+ */
+	static shouldRequireSameOrigin(resp, req) {
+		const isSameOrigin = req.isSameOrigin;
+
+		if (resp.ok && ! isSameOrigin) {
+			throw new Error(`${req.method} <${req.url}> should require Same-Origin.`);
+		} else if (! resp.ok && isSameOrigin) {
+			throw new Error(`${req.method} <${req.url}> should allow Same-Origin.`);
+		}
+	}
+
+	/**
 	 * Asserts that a Response object DOES NOT allow a specific Origin
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the Access-Control-Allow-Origin header is missing or allows the request's origin.
 	 */
 	static async shouldDisallowOrigin(resp, req) {
@@ -504,11 +719,13 @@ export class RequestHandlerTest {
 	/**
 	 * Asserts that a Response to an OPTIONS request includes the Access-Control-Allow-Methods header.
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the Access-Control-Allow-Methods header is missing in an OPTIONS request.
 	 */
 	static async shouldSupportOptionsMethod(resp, req) {
-		if (! resp.headers.has('Access-Control-Allow-Methods')) {
+		if (req.method !== 'OPTIONS') {
+			throw new TypeError(`${req.method} <${req.url}> is not an OPTIONS request, so this test is invalid.`);
+		} else if (! resp.headers.has('Access-Control-Allow-Methods')) {
 			throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Methods in OPTIONS request.`);
 		}
 	}
@@ -516,11 +733,20 @@ export class RequestHandlerTest {
 	/**
 	 * Asserts that a Response object does not indicate that the HTTP method used in the request is not allowed (405 Method Not Allowed).
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the response status is 405 Method Not Allowed.
 	 */
-	static async shouldAllowMethod(resp, req) {
-		if (resp.status === METHOD_NOT_ALLOWED) {
+	static shouldAllowMethod(resp, req) {
+		if (req.method === 'OPTIONS' && req.headers.has('Access-Control-Request-Method')) {
+			const method = req.headers.get('Access-Control-Request-Method').trim().toUpperCase();
+			const allowed = resp.headers.has('Access-Control-Allow-Methods')
+				? resp.headers.get('Access-Control-Allow-Methods').split(',').map(method => method.trim().toUpperCase())
+				: [];
+
+			if (! allowed.includes(method)) {
+				throw new Error(`${req.method} <${req.url}> should allow method ${method} but only allows ${allowed.join(', ')}.`);
+			}
+		} else if (resp.status === METHOD_NOT_ALLOWED) {
 			throw new Error(`${req.method} <${req.url}> should support HTTP method "${req.method}."`);
 		}
 	}
@@ -528,12 +754,21 @@ export class RequestHandlerTest {
 	/**
 	 * Asserts that a Response object indicates that the HTTP method used in the request is not allowed (405 Method Not Allowed).
 	 * @param {Response} resp The Response object to check.
-	 * @param {Request} req The Request object associated with the response.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
 	 * @throws {Error} If the response status is not 405 Method Not Allowed.
 	 */
-	static async shouldNotAllowMethod(resp, req) {
-		if (resp.status !== METHOD_NOT_ALLOWED) {
-			throw new Error(`${req.method} <${req.url}> should not support HTTP method "${req.method}."`);
+	static shouldNotAllowMethod(resp, req) {
+		if (req.method === 'OPTIONS' && req.headers.has('Access-Control-Request-Method')) {
+			const method = req.headers.get('Access-Control-Request-Method').trim().toUpperCase();
+			const allowed = resp.headers.has('Access-Control-Allow-Methods')
+				? resp.headers.get('Access-Control-Allow-Methods').split(',').map(method => method.trim().toUpperCase())
+				: [];
+
+			if (allowed.includes(method)) {
+				throw new Error(`${req.method} <${req.url}> should not allow method ${method}.`);
+			}
+		} else if (resp.status !== METHOD_NOT_ALLOWED) {
+			throw new Error(`${req.method} <${req.url}> should not support HTTP method "${req.method}. Got status [${resp.status}]."`);
 		}
 	}
 
@@ -569,7 +804,14 @@ export class RequestHandlerTest {
 
 			for (const result of results) {
 				if (result.status === 'rejected') {
-					errs.push(result.reason);
+					// errs.push(result.reason);
+					if (result.reason instanceof AggregateError) {
+						errs.push(...result.reason.errors);
+					} else if (result.reason instanceof Error) {
+						errs.push(result.reason);
+					} else {
+						errs.push(new Error(result.reason));
+					}
 				}
 			}
 

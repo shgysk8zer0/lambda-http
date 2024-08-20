@@ -1,7 +1,9 @@
+import '@shgysk8zer0/polyfills';
 import { HTTPError } from './error.js';
-import { METHOD_NOT_ALLOWED, INTERNAL_SERVER_ERROR, NO_CONTENT, FORBIDDEN } from './status.js';
+import { METHOD_NOT_ALLOWED, INTERNAL_SERVER_ERROR, NO_CONTENT, FORBIDDEN } from '@shgysk8zer0/consts/status.js';
 import { isSameOriginRequest } from './utils.js';
 import { contextFallback } from './context.js';
+import { NetlifyRequest } from './NetlifyRequest.js';
 
 const ACAO = 'Access-Control-Allow-Origin';
 // const ACRM = 'Access-Control-Request-Method';
@@ -13,7 +15,7 @@ const ACEH = 'Access-Control-Expose-Headers';
 
 export function createOptionsHandler(methods) {
 	return async function() {
-		const allow = [...methods, 'options'].join(', ').toUpperCase();
+		const allow = [...methods, 'OPTIONS'].join(', ').toUpperCase();
 
 		const headers = new Headers({
 			Allow: allow,
@@ -33,7 +35,7 @@ function addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredential
 				resp.headers.set(ACAC, 'true');
 			}
 
-			if (resp.headers.has(ACAC) && (! resp.headers.has(ACAO) && isAllowedOrigin(req, allowOrigins)) || resp.headers.get(ACAO) === '*') {
+			if (resp.headers.has(ACAC) && isAllowedOrigin(req, allowOrigins) && (resp.headers.get(ACAO) === '*' || ! resp.headers.has(ACAO)) ) {
 				resp.headers.set(ACAO, origin);
 			} else if (!resp.headers.has(ACAO) && (typeof allowOrigins === 'undefined' || isAllowedOrigin(req, allowOrigins))) {
 				resp.headers.set(ACAO, '*');
@@ -54,9 +56,9 @@ function addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredential
 		}
 	} catch(err) {
 		console.error(err);
-	} finally {
-		return resp;
 	}
+
+	return resp;
 }
 
 export function isAllowedOrigin(req, allowOrigins) {
@@ -102,6 +104,7 @@ export function createHandler(handlers, {
 	allowCredentials = false,
 	exposeHeaders,
 	requireCORS = false,
+	requireSameOrigin = false,
 	logger,
 } = {}) {
 	if ((typeof handlers !== 'object' || handlers === null)) {
@@ -112,16 +115,20 @@ export function createHandler(handlers, {
 
 	if (methods.length === 0) {
 		throw new Error('No methods given.');
+	} else if (requireCORS && requireSameOrigin) {
+		throw new TypeError('Cannot require both CORS and Same-Origin.');
 	}
 
 	if (! (handlers.options instanceof Function)) {
 		handlers.options = createOptionsHandler(methods, { allowHeaders, allowOrigins });
 	}
 
-	return async (req, context = contextFallback) => {
+	return async (orig, context = contextFallback) => {
 		try {
-			if (! (req instanceof Request)) {
-				throw new TypeError('Not a Request object.');
+			const req = new NetlifyRequest(orig, context);
+
+			if (requireSameOrigin && ! req.isSameOrigin) {
+				throw new HTTPError('Must be a same-origin request.', FORBIDDEN);
 			} else if (
 				requireCORS
 				&& ! isSameOriginRequest(req)
@@ -137,20 +144,26 @@ export function createHandler(handlers, {
 				const resp = await handlers[req.method.toLowerCase()].call(context, req, context);
 
 				if (resp instanceof Response) {
-					addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
-					return resp;
+					if (resp.status === 0) {
+						const resp = new HTTPError('Something broke :(', INTERNAL_SERVER_ERROR).response();
+						addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+						return resp;
+					} else {
+						addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+						return resp;
+					}
 				} else {
 					throw new HTTPError('Invalid response.', INTERNAL_SERVER_ERROR);
 				}
 			}
 		} catch (err) {
 			if (logger instanceof Function) {
-				logger.call(context, err, req, context);
+				logger.call(context, err, orig, context);
 			}
 
 			if (err instanceof HTTPError) {
 				const resp = Response.json(err, { status: err.status, headers: new Headers(err.headers) });
-				return addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+				return addCorsHeaders(resp, orig, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
 			} else {
 				const resp = Response.json({
 					error: {
@@ -162,7 +175,7 @@ export function createHandler(handlers, {
 					headers: new Headers({ [ACAO]: '*' }),
 				});
 
-				return addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+				return addCorsHeaders(resp, orig, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
 			}
 		}
 	};

@@ -109,7 +109,9 @@ export class Cookie {
 	}
 
 	set domain(val) {
-		if (typeof val !== 'string' || val.length === '') {
+		if (val instanceof URL) {
+			this.#domain = val.hostname;
+		} else if (typeof val !== 'string' || val.length === '') {
 			throw new TypeError('Cookie domain must be a non-empty string.');
 		} else {
 			this.#domain = val;
@@ -165,18 +167,6 @@ export class Cookie {
 		}
 	}
 
-	get httpOnly() {
-		return this.#httpOnly;
-	}
-
-	set httpOnly(val) {
-		if (typeof val !== 'boolean') {
-			throw new TypeError('Cookie httpOnly must be a boolean.');
-		} else {
-			this.#httpOnly = val;
-		}
-	}
-
 	get partitioned() {
 		return this.#partitioned;
 	}
@@ -194,7 +184,9 @@ export class Cookie {
 	}
 
 	set path(val) {
-		if (typeof val === 'string' && val.length !== 0) {
+		if (val instanceof URL) {
+			this.#path = val.pathname;
+		} else if (typeof val === 'string' && val.length !== 0) {
 			this.#path = val;
 		} else {
 			throw new TypeError('Cookie path must be a non-empty string.');
@@ -228,18 +220,18 @@ export class Cookie {
 	}
 
 	toString() {
-		const parts = [`${encodeURIComponent(this.#name)}=${encodeURIComponent(this.#value)}`];
+		const parts = [`${this.#name}=${this.#value}`];
 
 		if (typeof this.#expires === 'number') {
 			parts.push(`Expires=${new Date(this.#expires).toUTCString()}`);
 		}
 
 		if (typeof this.#domain === 'string') {
-			parts.push(`Domain=${encodeURIComponent(this.#domain)}`);
+			parts.push(`Domain=${this.#domain}`);
 		}
 
 		if (typeof this.#path === 'string' && this.#path !== '/') {
-			parts.push(`Path=${encodeURIComponent(this.#path)}`);
+			parts.push(`Path=${this.#path}`);
 		}
 
 		if (typeof this.#sameSite === 'string') {
@@ -260,16 +252,25 @@ export class Cookie {
 
 		return parts.join('; ');
 	}
+
+	addToHeaders(headers) {
+		if (! (headers instanceof Headers)) {
+			throw new TypeError('Expected a Headers object.');
+		} else {
+			headers.append('Set-Cookie', this);
+		}
+	}
+
 	addToResponse(resp) {
 		if (resp instanceof Response) {
-			resp.headers.append('Set-Cookie', this.toString());
+			this.addToHeaders(resp.headers);
 		} else {
 			throw new TypeError('Not a Response object.');
 		}
 	}
 }
 
-class CookieStore {
+export class CookieStore {
 	#map = new Map();
 
 	[Symbol.iterator]() {
@@ -324,37 +325,23 @@ class CookieStore {
 		}
 	}
 
+	addToHeaders(headers) {
+		if (! (headers instanceof Headers)) {
+			throw new TypeError('Expected a Headers object.');
+		} else {
+			for (const cookie of this) {
+				headers.append('Set-Cookie', cookie);
+			}
+		}
+	}
+
 	addToResponse(resp) {
-		for (const cookie of this) {
-			cookie.addToResponse(resp);
+		if (! (resp instanceof Response)) {
+			throw new TypeError('Expected a Response object.');
+		} else {
+			this.addToHeaders(resp.headers);
 		}
 	}
 }
 
-const cookie = new Cookie({
-	name: 'foo',
-	value: 'https://example.com',
-	expires: Date.now(),
-	secure: true,
-	sameSite: 'strict',
-	domain: 'events.kernvalley.us',
-	path: '/foo',
-});
-
-const cookieStore = new CookieStore();
-cookieStore.set(cookie);
-cookieStore.set('foo', 'bar');
-cookieStore.set({
-	name: 'num',
-	value: 42,
-	sameSite: 'strict',
-	expires: new Date('2024-08-01T00:00'),
-	domain: '.kernvalley.us',
-	path: '/events/',
-	secure: true,
-	partitioned: true,
-	httpOnly: true,
-});
-const resp = new Response(null);
-cookieStore.addToResponse(resp);
-
+export const cookieStore = new CookieStore();
