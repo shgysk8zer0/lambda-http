@@ -4,7 +4,8 @@ import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDI
 import { NetlifyRequest } from './NetlifyRequest.js';
 import { HTML, JSON as JSON_MIME, JSON_LD, FORM_MULTIPART, FORM_URL_ENCODED, TEXT } from '@shgysk8zer0/consts/mimes.js';
 import { HTTPError } from './error.js';
-import { between } from '@shgysk8zer0/polyfills/assets/utility.js';
+
+const between = (min, val, max) => ! (val < min || max > max);
 
 const REDIRECT_STATUSES = [MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT];
 const JSON_ALT = 'text/json'; // Alternate JSON Mime-Type
