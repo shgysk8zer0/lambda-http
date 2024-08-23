@@ -26,7 +26,7 @@ function addJSONMethods() {
 async function createResponse(req) {
 	if (req.accepts('application/json')) {
 		addJSONMethods();
-		const headers = new Headers();
+		const headers = new Headers({ 'Set-Cookie': 'foo=bar' });
 
 		return Response.json({
 			url: req.url,
@@ -52,7 +52,10 @@ export default createHandler(Object.fromEntries([
 	...['get', 'delete', 'post'].map(method => [method, createResponse]),
 ]), {
 	allowOrigins: ['http://localhost:9999', 'http://localhost:8888'],
+	allowHeaders: ['X-Foo'],
+	exposeHeaders: ['X-Bar'],
 	allowCredentials: true,
+	maxContentLength: 50_000,
 	// requireCORS: true,
 	requireSameOrigin: true,
 	// logger(err) {

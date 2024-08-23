@@ -65,6 +65,10 @@ export class NetlifyRequest extends Request {
 		}
 	}
 
+	get [Symbol.toStringTag]() {
+		return 'NetlifyRequest';
+	}
+
 	get accept() {
 		return this.#accept;
 	}
@@ -185,6 +189,10 @@ export class NetlifyRequest extends Request {
 		} else {
 			return false;
 		}
+	}
+
+	clone() {
+		return new NetlifyRequest(super.clone(), this.#context);
 	}
 
 	async data() {

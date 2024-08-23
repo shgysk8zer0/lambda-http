@@ -1,5 +1,5 @@
 import '@shgysk8zer0/polyfills';
-import { HTTPError } from './error.js';
+import { HTTPError, HTTPLengthRequiredError, HTTPPayloadTooLargeError, HTTPUnauthorizedError } from './error.js';
 import { METHOD_NOT_ALLOWED, INTERNAL_SERVER_ERROR, NO_CONTENT, FORBIDDEN } from '@shgysk8zer0/consts/status.js';
 import { isSameOriginRequest } from './utils.js';
 import { contextFallback } from './context.js';
@@ -12,6 +12,8 @@ const ACAM = 'Access-Control-Allow-Methods';
 const ACAH = 'Access-Control-Allow-Headers';
 const ACRH = 'Access-Control-Request-Headers';
 const ACEH = 'Access-Control-Expose-Headers';
+
+// const between = (min, val, max) => ! (val > max || val < min);
 
 export function createOptionsHandler(methods) {
 	return async function() {
@@ -93,6 +95,7 @@ export function isAllowedOrigin(req, allowOrigins) {
  * @param {string|string[]} [options.allowHeaders] - Allowed headers. Can be a string or an array of strings.
  * @param {boolean} [options.allowCredentials=false] - Whether to allow credentials (cookies, authorization headers, etc.).
  * @param {string|string[]} [options.exposeHeaders] - Headers to expose to the client. Can be a string or an array of strings.
+ * @param {number} [options.maxContentLength] - Maximum size allowed via Content-Length headers.
  * @param {function(Error, Request)} [options.logger=console.error] - A function to log errors. It receives the error object and the request as arguments.
  * @returns {function(Request, *): Promise<Response>} An async request handler function.
  *
@@ -105,6 +108,8 @@ export function createHandler(handlers, {
 	exposeHeaders,
 	requireCORS = false,
 	requireSameOrigin = false,
+	maxContentLength = NaN,
+	requireCredentials = false,
 	logger,
 } = {}) {
 	if ((typeof handlers !== 'object' || handlers === null)) {
@@ -125,9 +130,26 @@ export function createHandler(handlers, {
 
 	return async (orig, context = contextFallback) => {
 		try {
+			if (
+				orig.headers.has('Content-Length')
+				&& (Number.isSafeInteger(maxContentLength) && maxContentLength >= 0)
+				&& parseInt(orig.headers.get('Content-Length')) > maxContentLength
+			 ) {
+				throw new HTTPPayloadTooLargeError(`Max Content-Length is ${maxContentLength} - sent ${orig.headers.get('Content-Length')}.`, {
+					details: {
+						contentLength: parseInt(orig.headers.get('Content-Length')),
+						maxContentLength,
+					},
+				});
+			} else if (orig.body instanceof ReadableStream && ! orig.headers.has('Content-Length')) {
+				throw new HTTPLengthRequiredError('Request is missing required Content-Length header.');
+			}
+
 			const req = new NetlifyRequest(orig, context);
 
-			if (requireSameOrigin && ! req.isSameOrigin) {
+			if (requireCredentials && ! req.credentials === 'include') {
+				throw new HTTPUnauthorizedError(`${req.url} requires credentials.`);
+			} else if (requireSameOrigin && ! req.isSameOrigin) {
 				throw new HTTPError('Must be a same-origin request.', FORBIDDEN);
 			} else if (
 				requireCORS
