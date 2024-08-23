@@ -1,11 +1,17 @@
 import '@shgysk8zer0/polyfills';
 import { contextFallback as context } from './context.js';
-import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT, NOT_ACCEPTABLE, NOT_FOUND, INTERNAL_SERVER_ERROR } from '@shgysk8zer0/consts/status.js';
+import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT, NOT_ACCEPTABLE, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, FORBIDDEN, OK, NO_CONTENT } from '@shgysk8zer0/consts/status.js';
 import { NetlifyRequest } from './NetlifyRequest.js';
-import { HTML, JSON as JSON_MIME } from '@shgysk8zer0/consts/mimes.js';
+import { HTML, JSON as JSON_MIME, JSON_LD, FORM_MULTIPART, FORM_URL_ENCODED, TEXT } from '@shgysk8zer0/consts/mimes.js';
 import { HTTPError } from './error.js';
 
+const between = (min, val, max) => ! (val < min || max > max);
+
 const REDIRECT_STATUSES = [MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT];
+const JSON_ALT = 'text/json'; // Alternate JSON Mime-Type
+
+
+const getAllHeader = ({ headers }, name) => headers.get(name).split(',').map(header => header.trim().toLowerCase()).filter(str => str.length !== 0);
 
 function getHandlerModule() {
 	return async function(req) {
@@ -68,9 +74,10 @@ export class RequestHandlerTest {
 				const errs = [];
 				const results = await Promise.allSettled(assertionsCallback.map(async cb => {
 					if (! (cb instanceof Function)) {
+						console.log(cb);
 						throw new TypeError('Invalid assertion callback.');
 					} else {
-						return await cb.call(this, resp, req);
+						return await cb.call(this, resp.clone(), req.clone());
 					}
 				}));
 
@@ -445,8 +452,20 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the response status code is invalid.
 	 */
 	static shouldHaveValidStatus(resp, req) {
-		if (resp.status < 100 || resp.status > 599) {
+		if (! between(100, resp.status, 599)) {
 			throw new Error(`${req.method} <${req.url}> returned an invalid status code of ${resp.status}.`);
+		}
+	}
+
+	/**
+	 * Asserts that a Response object has an informational (1xx) HTTP status code.
+	 * @param {Response} resp The Response object to check.
+	 * @param {NetlifyRequest} req The Request object associated with the response.
+	 * @throws {Error} If the response does not have a 1xx status code.
+	 */
+	static shouldBeInformational(resp, req) {
+		if (! between(100, resp.status, 199)) {
+			throw new Error(`${req.method} <${req.url}> should return a 1xx status code. Got ${resp.status}.`);
 		}
 	}
 
@@ -536,6 +555,78 @@ export class RequestHandlerTest {
 	}
 
 	/**
+	 * Returns a function that checks if the response sets the specified cookies.
+	 *
+	 * @param {...string} cookies - The names of the cookies that should be set by the response.
+	 * @returns {function(Response, Request): void} - A function that takes a response and request, and verifies
+	 *     that the response sets the specified cookies.
+	 * @throws {Error} - If the response does not set any cookies or if it is missing expected cookies.
+	 */
+	static shouldSetCookies(...cookies) {
+		return (resp, req) => {
+			const setCookies = resp.headers.getSetCookie().map(cookie => cookie.split('=')[0]);
+
+			if (setCookies.length === 0) {
+				throw new Error(`${req.method} <${req.url} was did not set any cookies but was expected to.`);
+			} else {
+				const missing = cookies.filter(cookie => ! setCookies.includes(cookie));
+
+				if (missing.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> did not set expected cookies: [${missing.join(', ')}].`);
+				}
+			}
+		};
+	}
+
+	/**
+	 * Returns a function that checks if the response does not set the specified cookies.
+	 *
+	 * @param {...string} cookies - The names of the cookies that should not be set by the response.
+	 * @returns {function(Response, Request): void} - A function that takes a response and request, and verifies
+	 *     that the response does not set the specified cookies.
+	 * @throws {Error} - If the response sets any of the unexpected cookies.
+	 */
+	static shouldNotSetCookies(...cookies) {
+		return (resp, req) => {
+			const setCookies = resp.headers.getSetCookie().map(cookie => cookie.split('=')[0]);
+
+			if (setCookies.length !== 0) {
+				const invalid = cookies.filter(cookie => setCookies.includes(cookie));
+
+				if (invalid.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> did set unexpected cookies: [${invalid.join(', ')}].`);
+				}
+			}
+		};
+	}
+
+	/**
+	 * Asserts that the response does have a body.
+	 *
+	 * @param {Response} resp - The response object to be checked.
+	 * @param {Request} req - The request object associated with the response.
+	 * @throws {Error} - If the response body is not a `ReadableStream`, indicating that a body is not present.
+	 */
+	static shouldHaveBody(resp, req) {
+		if (! (resp.body instanceof ReadableStream)) {
+			throw new Error(`${req.method} <${req.url}> should have a body.`);
+		}
+	}
+
+	/**
+	 * Asserts that the response does not have a body.
+	 *
+	 * @param {Response} resp - The response object to be checked.
+	 * @param {Request} req - The request object associated with the response.
+	 * @throws {Error} - If the response body is a `ReadableStream`, indicating that a body is present.
+	 */
+	static shouldNotHaveBody(resp, req) {
+		if (resp.body instanceof ReadableStream) {
+			throw new Error(`${req.method} <${req.url}> should not have a body.`);
+		}
+	}
+
+	/**
 	 * Checks if the response is HTML content.
 	 *
 	 * @param {Response} resp - The response object.
@@ -558,9 +649,91 @@ export class RequestHandlerTest {
 		const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
 		test(resp, req);
 
-		await resp.clone().json().catch(() => {
+		await resp.json().catch(() => {
 			throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
 		});
+	}
+
+	/**
+	 * Returns a function that validates if a JSON response contains the specified keys.
+	 *
+	 * @param {...string} keys - The keys that the JSON object in the response should contain.
+	 * @returns {function(Response, Request): Promise<void>} - A function that takes a response and request,
+	 *     validates the JSON content type, and checks if the JSON object contains the specified keys.
+	 * @throws {Error} - If the response cannot be parsed as JSON or if the expected keys are missing.
+	 * @throws {TypeError} - If the parsed JSON is not an object or is null.
+	 */
+	static shouldHaveJSONKeys(...keys) {
+		return async (resp, req) => {
+			const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
+			test(resp, req);
+
+			const obj = await resp.json().catch(() => {
+				throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
+			});
+
+			if (typeof obj !== 'object') {
+				throw new TypeError(`${req.method} <${req.url} expected an object to be returned but got a ${typeof obj}.`);
+			} else if (Array.isArray(obj)) {
+				throw new TypeError(`${req.method} <${req.url} expected an object to be returned but got an array.`);
+			} else if (obj === null) {
+				throw new TypeError(`${req.method} <${req.url} expected an object to be returned but got null.`);
+			} else {
+				const missing = keys.filter(key => ! (key in obj));
+
+				if (missing.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> returned object is missing keys: [${missing.join(', ')}].`);
+				}
+			}
+		};
+	}
+
+	/**
+	 * Asserts that the response has a JSON content type and contains a JSON object.
+	 *
+	 * @param {Response} resp - The response object to be validated.
+	 * @param {Request} req - The request object associated with the response.
+	 * @returns {Promise<void>} - A promise that resolves if the response is valid, or throws an error if not.
+	 * @throws {Error} - If the response cannot be parsed as JSON.
+	 * @throws {TypeError} - If the parsed JSON is not an object.
+	 */
+	static async shouldBeJSONObject(resp, req) {
+		const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
+		test(resp, req);
+
+		const obj = await resp.json().catch(() => {
+			throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
+		});
+
+		if (typeof obj !== 'object') {
+			throw new TypeError(`${req.method} <${req.url} expected an object to be returned but got a ${typeof obj}.`);
+		} else if (Array.isArray(obj)) {
+			throw new TypeError(`${req.method} <${req.url} expected an object to be returned but got an array.`);
+		} else if (obj === null) {
+			throw new TypeError(`${req.method} <${req.url} expected an object to be returned but got null.`);
+		}
+	}
+
+	/**
+	 * Asserts that the response has a JSON content type and contains a JSON array.
+	 *
+	 * @param {Response} resp - The response object to be validated.
+	 * @param {Request} req - The request object associated with the response.
+	 * @returns {Promise<void>} - A promise that resolves if the response is valid, or throws an error if not.
+	 * @throws {Error} - If the response cannot be parsed as JSON.
+	 * @throws {TypeError} - If the parsed JSON is not an array.
+	 */
+	static async shouldBeJSONArray(resp, req) {
+		const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
+		test(resp, req);
+
+		const result = await resp.json().catch(() => {
+			throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
+		});
+
+		if (! Array.isArray(result)) {
+			throw new TypeError(`${req.method} <${req.url}> should return a JSON array.`);
+		}
 	}
 
 	/**
@@ -585,7 +758,7 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the response does not have a 4xx or 5xx status code.
 	 */
 	static shouldError(resp, req) {
-		if (resp.status < 400 || resp.status > 599) {
+		if (! between(400, resp.status, 599)) {
 			throw new Error(`${req.method} <${req.url}> should return a 4xx or 5xx status code. Got ${resp.status}.`);
 		}
 	}
@@ -597,7 +770,7 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the response does not have a 4xx status code.
 	 */
 	static shouldClientError(resp, req) {
-		if (resp.status < 400 || resp.status > 499) {
+		if (! between(400, resp.status, 499)) {
 			throw new Error(`${req.method} <${req.url}> should return a 4xx status code. Got ${resp.status}.`);
 		}
 	}
@@ -609,7 +782,7 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the response does not have a 5xx status code.
 	 */
 	static shouldServerError(resp, req) {
-		if (resp.status < 500 || resp.status > 599) {
+		if (! between(500, resp.status, 599)) {
 			throw new Error(`${req.method} <${req.url}> should return a 5xx status code. Got ${resp.status}.`);
 		}
 	}
@@ -654,6 +827,7 @@ export class RequestHandlerTest {
 				throw new Error(`${req.method} <${req.url}> redirected to ${resp.headers.get('Location')}, which does not match ${dest}.`);
 			} else if (dest instanceof URL) {
 				const location = new URL(resp.headers.get('Location'));
+
 				if (! (
 					location.origin === dest.origin
 					&& location.pathname.startsWith(dest.pathname)
@@ -689,7 +863,7 @@ export class RequestHandlerTest {
 	 * @param {Response} resp - The response object.
 	 * @param {NetlifyRequest} req - The Netlify request object.
 	 * @throws {Error} If the response and request origin mismatch.
- */
+ 	*/
 	static shouldRequireSameOrigin(resp, req) {
 		const isSameOrigin = req.isSameOrigin;
 
@@ -752,6 +926,121 @@ export class RequestHandlerTest {
 	}
 
 	/**
+	 * Checks if a given response and request combination allows the specified headers.
+	 *
+	 * Throws an error if the `Access-Control-Allow-Headers` header is missing or does not allow all specified headers.
+	 *
+	 * @param {...string} headers The headers that should be allowed.
+	 * @returns {function(Response, Request): void} A function that can be used to check the response and request.
+	 */
+	static shouldAllowsHeaders(...headers) {
+		return (resp, req) => {
+			if (! resp.headers.has('Access-Control-Allow-Headers')) {
+				throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Headers.`);
+			} else {
+				const allowed = resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
+				const missing = headers.filter(header => ! allowed.includes(header.toLowerCase()));
+
+				if (headers.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> misconfigured Access-Control-Allow-Headers should allow: [${missing.join(', ')}].`);
+				}
+			}
+		};
+	}
+
+	/**
+	 * Checks if a given response and request combination does not allow the specified headers.
+	 *
+	 * Throws an error if the `Access-Control-Allow-Headers` header is present and allows any of the specified headers.
+	 *
+	 * @param {...string} headers The headers that should not be allowed.
+	 * @returns {function(Response, Request): void} A function that can be used to check the response and request.
+	 */
+	static shouldNotAllowHeaders(...headers) {
+		return (resp, req) => {
+			if (! resp.headers.has('Access-Control-Allow-Headers')) {
+				throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Headers.`);
+			} else {
+				const allowed = resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
+				const disallowed = headers.filter(header => allowed.includes(header.toLowerCase()));
+
+				if (headers.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> misconfigured Access-Control-Allow-Headers should not allow: [${disallowed.join(', ')}].`);
+				}
+			}
+		};
+	}
+
+	/**
+	 * Checks if a given response and request combination allows the requested headers in a preflight request.
+	 *
+	 * Throws an error if the request is a preflight request (OPTIONS method with `Access-Control-Request-Headers`) and the response does not allow all requested headers.
+	 *
+	 * @param {Response} resp The response object.
+	 * @param {Request} req The request object.
+	 */
+	static shouldAllowRequestHeaders(resp, req) {
+		if (req.method === 'OPTIONS' && req.headers.has('Access-Control-Request-Headers')) {
+			if (resp.headers.has('Access-Control-Allow-Headers')) {
+				const reqHeaders = getAllHeader(req, 'Access-Control-Request-Headers');
+				//req.headers.get('Access-Control-Request-Headers').split(',').map(header => header.trim().toLowerCase());
+				const allowHeaders = getAllHeader(resp, 'Access-Control-Allow-Headers');
+				//resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
+				const disallowed = reqHeaders.filter(header => ! allowHeaders.includes(header));
+
+				if (disallowed.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> does not allow requested headers: [${disallowed.join(', ')}].`);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Checks if a given response and request combination exposes the specified headers.
+	 *
+	 * Throws an error if the `Access-Control-Expose-Headers` header is missing or does not expose all specified headers.
+	 *
+	 * @param {...string} headers The headers that should be exposed.
+	 * @returns {function(Response, Request): void} A function that can be used to check the response and request.
+	 */
+	static shouldExposeHeaders(...headers) {
+		return (resp, req) => {
+			if (! resp.headers.has('Access-Control-Expose-Headers')) {
+				throw new Error(`${req.method} <${req.url}> response missing Access-Control-Expose-Headers.`);
+			} else {
+				const exposed = getAllHeader(resp, 'Access-Control-Expose-Headers');
+				//resp.headers.get('Access-Control-Expose-Headers').split(',').map(header => header.trim().toLowerCase());
+				const missing = headers.filter(header => ! exposed.includes(header.toLowerCase()));
+
+				if (missing.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> response misconfigured Access-Control-Expose-Headers should expose: [${missing.join(', ')}].`);
+				}
+			}
+		};
+	}
+
+	/**
+	 * Checks if a given response and request combination does not expose the specified headers.
+	 *
+	 * Throws an error if the `Access-Control-Expose-Headers` header is present and exposes any of the specified headers.
+	 *
+	 * @param {...string} headers The headers that should not be exposed.
+	 * @returns {function(Response, Request): void} A function that can be used to check the response and request.
+	 */
+	static shouldNotExposeHeaders(...headers) {
+		return (resp, req) => {
+			if (resp.headers.has('Access-Control-Expose-Headers')) {
+				const exposed = getAllHeader(resp, 'Access-Control-Expose-Headers');
+				const disallowed = headers.filter(header => exposed.includes(header.toLowerCase()));
+
+				if (disallowed.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> response misconfigured Access-Control-Expose-Headers should not expose: [${disallowed.join(', ')}].`);
+				}
+			}
+		};
+	}
+
+	/**
 	 * Asserts that a Response object indicates that the HTTP method used in the request is not allowed (405 Method Not Allowed).
 	 * @param {Response} resp The Response object to check.
 	 * @param {NetlifyRequest} req The Request object associated with the response.
@@ -769,6 +1058,158 @@ export class RequestHandlerTest {
 			}
 		} else if (resp.status !== METHOD_NOT_ALLOWED) {
 			throw new Error(`${req.method} <${req.url}> should not support HTTP method "${req.method}. Got status [${resp.status}]."`);
+		}
+	}
+
+	/**
+	 * Checks if a given response and request combination requires credentials.
+	 *
+	 * Throws an error if credentials are not required but `req.credentials` is set to `'omit'`.
+	 * Throws an error if the request mode is `'cors'` but the necessary CORS headers are missing or invalid.
+	 *
+	 * @param {Response} resp The response object.
+	 * @param {Request} req The request object.
+	 */
+	static shouldRequireCredentials(resp, req) {
+		if (resp.status !== UNAUTHORIZED && req.credentials === 'omit') {
+			throw new Error(`${req.method} <${req.url}> should require credentials.`);
+		} else if (req.mode === 'cors') {
+			if (resp.headers.get('Access-Control-Allow-Credentials') !== 'true') {
+				throw new Error(`${resp.method} <${resp.url}> missing required Access-Control-Allow-Credentials header.`);
+			} else if (! resp.headers.has('Access-Control-Allow-Origin')) {
+				throw new Error(`${resp.method} <${resp.url}> missing required Access-Control-Allow-Origin header.`);
+			} else if (! URL.canParse(req.headers.get('Access-Control-Allow-Origin'))) {
+				throw new Error(`${resp.method} <${resp.url}> invalid Access-Control-Allow-Origin header: ${resp.headers.get('Access-Control-Allow-Origin')}.`);
+			} else if (req.headers.get('Origin') !== resp.headers.get('Access-Control-Allow-Origin')) {
+				throw new Error(`${req.method} <${req.url}> origin mismatch. Request from ${req.headers.get('origin')} but allows ${resp.headers.get('Access-Control-Allow-Origin')}`);
+			}
+		}
+	}
+
+	/**
+	 * Checks if a given response and request combination should not require credentials.
+	 *
+	 * Throws an error if the response status is `UNAUTHORIZED` or `FORBIDDEN` but credentials are required.
+	 *
+	 * @param {Response} resp The response object.
+	 * @param {Request} req The request object.
+	 */
+	static shouldNotRequireCredentials(resp, req) {
+		if (resp.status === UNAUTHORIZED || resp.status === FORBIDDEN) {
+			throw new Error(`${req.method} <${req.url}> should not require credentials.`);
+		}
+	}
+
+	/**
+	 * Checks if a given response and request combination passes preflight checks for CORS.
+	 *
+	 * Throws an error if the request is not a valid OPTIONS request, if required headers are missing, or if the requested method or headers are not allowed.
+	 *
+	 * @param {Response} resp The response object.
+	 * @param {Request} req The request object.
+	 */
+	static shouldPassPreflight(resp, req) {
+		if (req.method !== 'OPTIONS') {
+			throw new TypeError(`${req.method} <${req.url}> preflight tests only apply to OPTIONS requests.`);
+		} else if (req.mode !== 'cors' || ! req.headers.has('Origin')) {
+			throw new Error(`${req.method} <${req.url}> is not a valid CORS request.`);
+		} else if (! URL.parse(req.headers.get('Origin'))?.origin === req.headers.get('Origin')) {
+			throw new Error(`${req.method} <${req.url}> has an invalid Origin of "${req.headers.get('Origin')}".`);
+		} else if (! req.headers.has('Access-Control-Request-Method')) {
+			throw new Error(`${req.method} <${req.url}> is missing required Access-Control-Request-Method header.`);
+		} else if (! (resp.status === OK || resp.status === NO_CONTENT)) {
+			throw new Error(`${req.method} <${req.url}> expected a 2xx status but got ${resp.status}.`);
+		} else if (! getAllHeader(resp, 'Access-Control-Allow-Methods').includes(req.headers.get('Access-Control-Request-Method').toLowerCase())) {
+			throw new Error(`${req.method} <${req.url}> expected to allow ${req.headers.get('Access-Control-Request-Method')} but does not.`);
+		} else if (resp.body instanceof ReadableStream) {
+			throw new Error(`${resp.method} <${resp.url}> - Options response must not have a body.`);
+		} else if (
+			req.credentials === 'include'
+			&& (! resp.headers.has('Access-Control-Allow-Origin') || resp.headers.get('Access-Control-Allow-origin') !== req.headers.get('Origin'))
+		) {
+			throw new Error(`${req.method} <${req.url}> has misconfigured CORS headers for a credentialed request.`);
+		} else {
+			const reqHeaders = getAllHeader(req, 'Access-Control-Request-Headers');
+
+			if (reqHeaders.length !== 0) {
+				const allowed = getAllHeader(resp, 'Access-Control-Allow-Headers');
+				const missing = reqHeaders.filter(header => ! allowed.includes(header));
+
+				if (missing.length !== 0) {
+					throw new Error(`${req.method} <${req.url}> does not allow requested headers: [${missing.join(', ')}]`);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Logs the request object to the console.
+	 *
+	 * @param {*} _ - Unused parameter.
+	 * @param {Request} req - The request object to be logged.
+	 */
+	static logRequest(_, req) {
+		console.log(req);
+	}
+
+	/**
+	 * Logs the headers of the request object to the console.
+	 *
+	 * @param {*} _ - Unused parameter.
+	 * @param {Request} req - The request object whose headers are to be logged.
+	 */
+	static logRequestHeaders(_, req) {
+		console.log(Object.fromEntries(req.headers));
+	}
+
+	/**
+	 * Logs the response object to the console.
+	 *
+	 * @param {Response} resp - The response object to be logged.
+	 */
+	static logResponse(resp) {
+		console.log(resp);
+	}
+
+	/**
+	 * Logs the headers of the response object to the console.
+	 *
+	 * @param {Response} resp - The response object whose headers are to be logged.
+	 */
+	static logResponseHeaders(resp) {
+		console.log(Object.fromEntries(resp.headers));
+	}
+
+	/**
+	 * Logs the headers of the response body/data to the console.
+	 *
+	 * @param {Response} resp - The response object whose body are to be logged.
+	 */
+	static async logResponseBody(resp) {
+		if (resp.headers.has('Content-Type')) {
+			switch(resp.headers.get('Content-Type').toLowerCase()) {
+				case '':
+					 console.log(null);
+					 break;
+
+				case JSON_MIME:
+				case JSON_ALT:
+				case JSON_LD:
+					console.log(await resp.json());
+					break;
+
+				case FORM_MULTIPART:
+				case FORM_URL_ENCODED:
+					console.log(await resp.formData());
+					break;
+
+				case TEXT:
+					console.log(await resp.text());
+					break;
+
+				default:
+					console.log(resp.headers.get('Content-Type').endsWith('+json') ? await resp.json() : await resp.blob());
+			}
 		}
 	}
 

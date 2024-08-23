@@ -1,30 +1,53 @@
+import { PAYLOAD_TOO_LARGE } from '@shgysk8zer0/consts/status.js';
 import { RequestHandlerTest } from '../RequestHandlerTest.js';
+import { TestRequest } from '../TestRequest.js';
 
 const origin = 'http://localhost:8888';
 const url = new URL('/api/echo', origin);
 const referrer = origin;
 const body = new FormData();
 body.set('foo', 'bar');
-body.set('file', new File(['Hello, World!'], 'hi.txt', { type: 'text/plain' }));
+const file = new Blob([crypto.getRandomValues(new Uint8Array(5000))], { type: 'application/octet-stream' });
+body.set('file', file);
 
 const headers = {
-	'Sec-Fetch-Dest': 'empty',
-	'Sec-Fetch-Mode': 'no-cors',
-	'Sec-Fetch-Site': 'same-origin',
 	'Origin': origin,
-	'Referer': referrer,
 };
 
 const { error } = await RequestHandlerTest.runTests(
 	new RequestHandlerTest(
-		new Request(url + '?test=basic', { headers, referrer }),
-		[RequestHandlerTest.shouldRequireSameOrigin, RequestHandlerTest.shouldBeOk, RequestHandlerTest.shouldBeJSON]
+		new TestRequest(url, { headers, referrer, searchParams: { test: 'basic' }}),
+		[
+			RequestHandlerTest.shouldRequireSameOrigin,
+			RequestHandlerTest.shouldBeOk,
+			RequestHandlerTest.shouldHaveBody,
+			RequestHandlerTest.shouldBeJSONObject,
+			RequestHandlerTest.shouldSetCookies('foo'),
+			RequestHandlerTest.shouldNotSetCookies('bar'),
+		]
 	),
 	new RequestHandlerTest(
-		new Request(url + '?test=invalid=method', {
+		new TestRequest(url, {
+			method: 'POST',
+			headers,
+			body: new Blob([crypto.getRandomValues(new Uint8Array(65_536))], { type: 'application/octet-stream' }),
+		}),
+		[RequestHandlerTest.shouldHaveStatus(PAYLOAD_TOO_LARGE)]
+	),
+	new RequestHandlerTest(
+		TestRequest.json({ now: Date.now() }, url, { headers, searchParams: { test: 'json' }}),
+		RequestHandlerTest.shouldBeOk
+	),
+	new RequestHandlerTest(
+		new TestRequest(url, { referrer }),
+		[RequestHandlerTest.shouldHaveJSONKeys('url', 'headers')]
+	),
+	new RequestHandlerTest(
+		new TestRequest(url, {
+			searchParams: { test: 'invalid-method' },
 			method: 'PATCH',
 			headers,
-			body,
+			body: body.get('file'),
 		}),
 		RequestHandlerTest.shouldNotAllowMethod
 	),
@@ -33,27 +56,41 @@ const { error } = await RequestHandlerTest.runTests(
 		RequestHandlerTest.shouldClientError
 	),
 	new RequestHandlerTest(
-		new Request(url + '?test=cross-origin', {
+		new TestRequest(url, {
+			searchParams: { test: 'form-data' },
+			method: 'POST',
+			headers,
+			body,
+		})
+	),
+	new RequestHandlerTest(
+		new TestRequest(url + '?test=cross-origin', {
 			headers: {
 				...headers,
 				Origin: 'https://not-allowed.org',
-				Referer: 'about:client'
+				// Referer: 'about:client'
 			},
+			referrer: 'about:client',
 			mode: 'cors',
 			referrerPolicy: 'no-referrer',
 		}),
 		[RequestHandlerTest.shouldDisallowOrigin, RequestHandlerTest.shouldRequireSameOrigin, RequestHandlerTest.shouldClientError]
 	),
 	new RequestHandlerTest(
-		new Request(url + '?test=options', {
+		new TestRequest(url + '?test=options', {
 			method: 'OPTIONS',
 			referrer,
 			headers: {
 				'Access-Control-Request-Method': 'POST',
+				'Access-Control-Request-Headers': 'X-Foo',
 				...headers
 			}
 		}),
-		[RequestHandlerTest.shouldBeOk, RequestHandlerTest.shouldAllowMethod]
+		[
+			RequestHandlerTest.shouldExposeHeaders('X-Bar'),
+			RequestHandlerTest.shouldNotExposeHeaders('X-Bazz'),
+			RequestHandlerTest.shouldPassPreflight,
+		]
 	)
 );
 
