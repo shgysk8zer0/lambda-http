@@ -1,36 +1,35 @@
 import { RequestHandlerTest } from '../RequestHandlerTest.js';
-import { NOT_FOUND } from '@shgysk8zer0/consts/status.js';
-// import { METHOD_NOT_ALLOWED } from '../status.js';
+import { TestRequest } from '../TestRequest.js';
 
 const url = 'http://localhost:8888/api/error';
 const headers = new Headers({ Accept: 'application/json', Origin: 'http://localhost:9999' });
 
 const { error } = await RequestHandlerTest.runTests(
 	new RequestHandlerTest(
-		new Request(url, { headers }),
+		new TestRequest(url, { headers }),
 		[RequestHandlerTest.shouldHaveValidStatus, RequestHandlerTest.shouldServerError, RequestHandlerTest.shouldBeJSON]
 	),
 	new RequestHandlerTest(
-		new Request(url, { method: 'DELETE', headers }),
-		RequestHandlerTest.shouldNotAllowMethod
+		new TestRequest(url, { method: 'DELETE', headers }),
+		[RequestHandlerTest.shouldNotAllowMethod]
 	),
 	new RequestHandlerTest(
-		new Request(url, { headers: { Accept: 'text/plain' }}),
-		RequestHandlerTest.shouldNotAccept,
+		new TestRequest(url, { headers: { Accept: 'text/plain' }}),
+		[RequestHandlerTest.shouldNotAccept]
 	),
 	new RequestHandlerTest(
-		new Request(url, {
+		new TestRequest(url, {
 			method: 'OPTIONS',
-			headers: new Headers({ 'Access-Control-Request-Method': 'GET', Origin: 'http://localhost:9999' }),
+			headers: new Headers({
+				'Access-Control-Request-Method': 'GET',
+				Origin: 'http://localhost:9999',
+				'Access-Control-Request-Headers': 'X-Foo, X-Bar'
+			}),
 		}),
-		[RequestHandlerTest.shouldSupportOptionsMethod]
+		[RequestHandlerTest.shouldSupportOptionsMethod, RequestHandlerTest.shouldAllowRequestHeaders]
 	),
 	new RequestHandlerTest(
-		new Request(new URL('./dne', url)),
-		RequestHandlerTest.shouldHaveStatus(NOT_FOUND)
-	),
-	new RequestHandlerTest(
-		new Request(url, {
+		new TestRequest(url, {
 			method: 'OPTIONS',
 			headers: { ...headers, 'Access-Control-Request-Method': 'PATCH' },
 		}),

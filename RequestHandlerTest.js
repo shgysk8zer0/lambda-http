@@ -1,8 +1,9 @@
 import '@shgysk8zer0/polyfills';
 import { contextFallback as context } from './context.js';
-import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT, NOT_ACCEPTABLE, NOT_FOUND, INTERNAL_SERVER_ERROR, UNAUTHORIZED, FORBIDDEN, OK, NO_CONTENT } from '@shgysk8zer0/consts/status.js';
+import { METHOD_NOT_ALLOWED, MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT, NOT_ACCEPTABLE, UNAUTHORIZED, FORBIDDEN, OK, NO_CONTENT } from '@shgysk8zer0/consts/status.js';
 import { NetlifyRequest } from './NetlifyRequest.js';
 import { HTML, JSON as JSON_MIME, JSON_LD, FORM_MULTIPART, FORM_URL_ENCODED, TEXT } from '@shgysk8zer0/consts/mimes.js';
+import { loadModuleHandler, getFileURL } from './utils.js';
 import { HTTPError } from './error.js';
 
 const between = (min, val, max) => ! (val < min || max > max);
@@ -10,23 +11,31 @@ const between = (min, val, max) => ! (val < min || max > max);
 const REDIRECT_STATUSES = [MOVED_PERMANENTLY, FOUND, SEE_OTHER, TEMPORARY_REDIRECT, PERMANENT_REDIRECT];
 const JSON_ALT = 'text/json'; // Alternate JSON Mime-Type
 
-
-const getAllHeader = ({ headers }, name) => headers.get(name).split(',').map(header => header.trim().toLowerCase()).filter(str => str.length !== 0);
+/**
+ * Retrieves all values of a specified header from a request or response object.
+ *
+ * @param {Request|Response} object The request or response object.
+ * @param {string} name The name of the header.
+ * @returns {string[]} An array of header values, or an empty array if the header is not present.
+ */
+const getAllHeader = ({ headers }, name) => headers.get(name)
+	?.split(',')
+	?.map(header => header.trim().toLowerCase())
+	?.filter(str => str.length !== 0) ?? [];
 
 function getHandlerModule() {
 	return async function(req) {
-		const base = 'process' in globalThis && process.cwd instanceof Function ? 'file://' + process.cwd() + '/' : globalThis.document?.baseURI;
-		const path = new URL(req.url, base).pathname;
-		const module = await import(base  + path.substring(1) + '.js').catch(() => {
-			return new HTTPError(`Error loading module for <${req.url}>`, NOT_FOUND).response;
-		});
+		const url = getFileURL(req.url);
 
-		if (module instanceof Response) {
-			return module;
-		} else if (! (module.default instanceof Function)) {
-			return new HTTPError(`Module at ${path} does not export a default handler function.`, INTERNAL_SERVER_ERROR).response();
-		} else {
-			return await module.default.call(context, req, context);
+		try {
+			const handler = await loadModuleHandler(url);
+			return await handler.call(context, req, context);
+		} catch(err) {
+			if (err instanceof HTTPError) {
+				return err.response;
+			} else {
+				throw err;
+			}
 		}
 	};
 }
@@ -38,6 +47,8 @@ export class RequestHandlerTest {
 	#handler;
 	#request;
 	#response;
+	#logger;
+	#name;
 	#assertionsCallback;
 	#errors = [];
 
@@ -58,9 +69,9 @@ export class RequestHandlerTest {
 	 *   - `undefined` or `null`: Assertion passed (no explicit return value)
 	 */
 
-	constructor(request, assertionsCallback) {
-		if (!(request instanceof Request)) {
-			this.#errors.push(new TypeError('Test request is not a Request object.'));
+	constructor(request, assertionsCallback, { logger, name } = {}) {
+		if (! (request instanceof Request)) {
+			throw new TypeError('Test request is not a Request object.');
 		} else if (! (request instanceof NetlifyRequest)) {
 			this.#request = new NetlifyRequest(request, context);
 		} else {
@@ -69,15 +80,24 @@ export class RequestHandlerTest {
 
 		this.#handler = getHandlerModule(request);
 
+		if (logger instanceof Function) {
+			this.#logger = logger;
+		}
+
+		if (typeof name === 'string') {
+			this.#name = name;
+		} else {
+			this.#name = 'Unnamed test';
+		}
+
 		if (Array.isArray(assertionsCallback) && assertionsCallback.length !== 0) {
 			this.#assertionsCallback = async (resp, req) => {
 				const errs = [];
 				const results = await Promise.allSettled(assertionsCallback.map(async cb => {
 					if (! (cb instanceof Function)) {
-						console.log(cb);
 						throw new TypeError('Invalid assertion callback.');
 					} else {
-						return await cb.call(this, resp.clone(), req.clone());
+						return cb.call(this, resp, req);
 					}
 				}));
 
@@ -85,7 +105,7 @@ export class RequestHandlerTest {
 					if (result.status === 'rejected') {
 						if (result.reason instanceof AggregateError) {
 							errs.push(...result.reason.errors);
-						} else if (result.reason instanceof Error) {
+						} else if (result.reason instanceof Error || result.reason instanceof DOMException) {
 							errs.push(result.reason);
 						} else {
 							errs.push(new Error(result.reason));
@@ -122,6 +142,10 @@ export class RequestHandlerTest {
 		return this.response.headers;
 	}
 
+	get name() {
+		return this.#name;
+	}
+
 	/**
 	 * Gets the Request object upon which tests will be performed.
 	 * @returns {NetlifyRequest} The Request object upon which tests will be performed.
@@ -136,7 +160,7 @@ export class RequestHandlerTest {
 	 */
 	get response() {
 		if (this.#response instanceof Response) {
-			return this.#response.clone();
+			return this.#response;
 		} else {
 			return Response.error();
 		}
@@ -296,54 +320,96 @@ export class RequestHandlerTest {
 	 * This method attempts to call the handler function with the provided request and context. It captures and stores any errors that occur during execution. If the handler returns a Response object, it will be stored in the `#response` property. If the handler returns an Error object, or if an assertion callback is provided and fails, the error is added to the `#errors` array.
 	 *
 	 * @returns {Promise<RequestHandlerTest>} A Promise that resolves to this RequestHandlerTest instance, regardless of whether the test succeeded or failed.
-	 */
+	*/
 	async runSafe() {
-		if (this.#response instanceof Response) {
-			this.#errors.push(new Error('Test has already been run.'));
-		} else if (this.#handler instanceof Function && this.#request instanceof Request) {
-			try {
-				console.info(`Testing ${this.#request.method} <${this.#request.url}>`);
+		const { resolve, reject, promise } = Promise.withResolvers();
+		const controller = new AbortController();
+
+		try {
+			if (! (this.#request instanceof Request)) {
+				reject(new TypeError('Invalid Request.'));
+			} else if (this.#response instanceof Response) {
+				reject(new Error('Test has already been run.'));
+			} else if (! (this.#handler instanceof Function)) {
+				reject(new Error('Handler is not a Function.'));
+			} else if (this.#request.signal instanceof AbortSignal && this.#request.signal.aborted) {
+				reject(new Error(`${this.#request.method} <${this.#request.url}> aborted.`, { cause: this.#request.signal.reason }));
+			} else {
+				console.info(`Testing ${this.#request?.method} <${this.#request?.url}>`);
+
+				controller.signal.addEventListener('abort', ({ target }) => {
+					this.#log(`Aborted with reason "${target.reason}".`);
+				}, { once: true });
+
+				if (this.#request.signal instanceof AbortSignal) {
+					this.#request.signal.addEventListener('abort', ({ target }) => {
+						console.warn(target.reason);
+						reject(new Error(`${this.#request.method} <${this.#request.url}> aborted.`, { cause: target.reason }));
+						controller.abort(target.reason);
+					}, { once: true, signal: controller.signal });
+				} else {
+					reject(new Error('No AbortSignal in Request'));
+				}
+
 				const result = await this.#handler.call(context, this.#request, context);
 
-				if (result instanceof AggregateError && result.errors.length !== 0) {
-					this.#errors.push(...result.errors);
-				} else if (result instanceof Error) {
-					this.#errors.push(result);
+				if (result instanceof HTTPError) {
+					resolve(result.response);
+					controller.abort('Resolving with an HTTPError Response.');
+				} else if (result instanceof Error || result instanceof DOMException) {
+					reject(result);
+					controller.abort('Result was an error.');
 				} else if (! (result instanceof Response)) {
-					this.#errors.push(new TypeError('Handler did not return a Response object or error.'));
+					reject(new TypeError('Handler did not return a Response object or error.'));
+					controller.abort('Was not a Response object');
 				} else if (this.#assertionsCallback instanceof Function) {
 					const assertResult = await this.#assertionsCallback.call(this, result, this.#request);
 
 					if (typeof assertResult === 'boolean') {
 						if (assertResult) {
-							this.#response = result;
+							resolve(result);
+							controller.abort('Resolved');
 						} else {
-							this.#errors.push(new Error('An assertion failed.'));
+							reject(new Error('An assertion failed.'));
+							controller.abort('An assertion failed');
 						}
 					} else if (typeof assertResult === 'undefined' || assertResult === null) {
-						this.#response = result;
+						resolve(result);
+						controller.abort('Assertion passed.');
 					} else if (typeof assertResult === 'string') {
-						this.#errors.push(new Error(assertResult));
-					} else if (assertResult instanceof AggregateError) {
-						this.#errors.push(...assertResult.errors);
-					} else if (assertResult instanceof Error) {
-						this.#errors.push(result);
+						reject(new Error(assertResult));
+						controller.abort('Assertion errored.');
+					} else if (assertResult instanceof Error || assertResult instanceof DOMException) {
+						reject(assertResult);
+						controller.abort('Assertion returned an error.');
 					} else {
-						this.#errors.push(new TypeError(`Invalid result type from assertion: ${typeof assertResult}`));
+						reject(new TypeError(`Invalid result type from assertion: ${typeof assertResult}`));
+						controller.abort('Invalid return from assertion');
 					}
 				} else {
-					this.#response = result;
-				}
-			} catch (err) {
-				if (err instanceof AggregateError) {
-					this.#errors.push(...err.errors);
-				} else if (err instanceof Error) {
-					this.#errors.push(err);
-				} else {
-					this.#errors.push(new Error(err));
+					resolve(result);
+					controller.abort('Resolved normally');
 				}
 			}
+		} catch(err) {
+			reject(err);
 		}
+
+		await promise.then(response => {
+			this.#response = response;
+			controller.abort('Completed successfully');
+			this.#log('Success!');
+		}).catch(err => {
+			this.#log(err);
+
+			if (err instanceof AggregateError) {
+				this.#errors.push(...err.errors);
+			} else if (err instanceof Error || err instanceof DOMException) {
+				this.#errors.push(err);
+			} else {
+				this.#errors.push(new Error(err));
+			}
+		});
 		// Will already have errors if request or callback are invalid
 
 		return this;
@@ -404,6 +470,14 @@ export class RequestHandlerTest {
 		}
 	}
 
+	#log(...what) {
+		if (this.#logger instanceof Function) {
+			return this.#logger.apply(this, what);
+		} else {
+			return false;
+		}
+	}
+
 	/**
 	 * Runs multiple RequestHandlerTest instances and collects results.
 	 *
@@ -411,37 +485,31 @@ export class RequestHandlerTest {
 	 * @returns {Promise<{success: RequestHandlerTest[], error?: AggregateError}>} An object containing successful tests and any errors encountered.
 	 */
 	static async runTests(...tests) {
-		const errors = [];
-		const success = [];
+		try {
+			const errors = [];
+			const success = [];
 
-		const results = await Promise.allSettled(Array.from(
-			tests,
-			test => {
-				if (! (test instanceof RequestHandlerTest)) {
-					throw new TypeError('Tests must be a RequestHandlerTest.');
-				} else if (test.hasErrors) {
-					throw test.error;
-				} else {
-					return test.run('This test failed.');
-				}
-			}
-		));
+			await Promise.all(Array.from(
+				tests,
+				async test => {
+					if (! (test instanceof RequestHandlerTest)) {
+						errors.push(new TypeError('Test is not a RequestHandlerTest'));
+					} else {
+						await test.runSafe('This test has failed');
 
-		for (const result of results) {
-			if (result.status === 'rejected') {
-				if (result.reason instanceof AggregateError) {
-					errors.push(...result.reason.errors);
-				} else if (result.reason instanceof Error) {
-					errors.push(result.reason);
-				} else {
-					errors.push(new Error(result.reason));
-				}
-			} else {
-				success.push(result.value);
-			}
+						if (test.hasErrors) {
+							errors.push(...test.errors);
+						} else {
+							success.push(test.response);
+						}
+					}
+				},
+			));
+
+			return { success, error: errors.length === 0 ? null : new AggregateError(errors, 'Some tests failed.') };
+		} catch(error) {
+			return { success: [], error };
 		}
-
-		return { success, error: errors.length === 0 ? null : new AggregateError(errors, 'Some tests failed.') };
 	}
 
 	/**
@@ -649,7 +717,7 @@ export class RequestHandlerTest {
 		const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
 		test(resp, req);
 
-		await resp.json().catch(() => {
+		await resp.clone().json().catch(() => {
 			throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
 		});
 	}
@@ -701,7 +769,7 @@ export class RequestHandlerTest {
 		const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
 		test(resp, req);
 
-		const obj = await resp.json().catch(() => {
+		const obj = await resp.clone().json().catch(() => {
 			throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
 		});
 
@@ -727,7 +795,7 @@ export class RequestHandlerTest {
 		const test = RequestHandlerTest.shouldHaveContentType(JSON_MIME);
 		test(resp, req);
 
-		const result = await resp.json().catch(() => {
+		const result = await resp.clone().json().catch(() => {
 			throw new Error(`${req.method} <${req.url}> could not be parsed as JSON.`);
 		});
 
@@ -798,15 +866,15 @@ export class RequestHandlerTest {
 			throw new Error(`${req.method} <${req.url}> should have a 3xx redirect status code, but got ${resp.status}.`);
 		} else if (! resp.headers.has('Location')) {
 			throw new Error(`${req.method} <${req.url}> should redirect but is missing the Location HTTP header.`);
-		} else if (! URL.canParse(resp.headers.get('Location'))) {
-			throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - get ${resp.headers.get('Location')}.`);
+		} else if (! URL.canParse(resp.headers.get('Location'), req.url)) {
+			throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - got ${resp.headers.get('Location')}.`);
 		}
 	}
 
 	/**
 	 * Creates a middleware function that checks if a response is a valid redirect.
 	 *
-	 * @param {string|RegExp|URL} [dest] - Optional destination for the redirect.
+	 * @param {string|RegExp|URL|URLPattern} dest - Destination for the redirect.
 	 *   - If a string, the redirect URL must start with this string.
 	 *   - If a RegExp, the redirect URL must match this regular expression.
 	 *   - If a URL, the redirect URL must have the same origin, pathname, and search parameters.
@@ -815,26 +883,29 @@ export class RequestHandlerTest {
 	 */
 	static shouldRedirectTo(dest) {
 		return (resp, req) => {
+			const loc = URL.parse(resp.headers.get('Location'), req.url);
+
 			if (! REDIRECT_STATUSES.includes(resp.status)) {
 				throw new Error(`${req.method} <${req.url}> should have a 3xx redirect status code, but got ${resp.status}.`);
 			} else if (! resp.headers.has('Location')) {
 				throw new Error(`${req.method} <${req.url}> should redirect but is missing the Location HTTP header.`);
-			} else if (! URL.canParse(resp.headers.get('Location'))) {
-				throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - get ${resp.headers.get('Location')}.`);
-			} else if (typeof dest === 'string' && ! resp.headers.get('Location').startsWith(dest)) {
-				throw new Error(`${req.method} <${req.url}> should redirect to ${dest} but gave ${resp.headers.get('Location')}.`);
-			} else if (dest instanceof RegExp && ! dest.test(resp.headers.get('Location'))) {
+			} else if (! (loc instanceof URL)) {
+				throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - got ${resp.headers.get('Location')}.`);
+			} else if (typeof dest === 'string' && loc.href !== dest) {
+				throw new Error(`${req.method} <${req.url}> should redirect to ${dest} but gave ${loc}.`);
+			} else if (dest instanceof RegExp && ! dest.test(loc.href)) {
 				throw new Error(`${req.method} <${req.url}> redirected to ${resp.headers.get('Location')}, which does not match ${dest}.`);
-			} else if (dest instanceof URL) {
-				const location = new URL(resp.headers.get('Location'));
-
-				if (! (
-					location.origin === dest.origin
-					&& location.pathname.startsWith(dest.pathname)
-					&& [...dest.searchParams.keys].every(param => location.searchParams.has(param))
-				)) {
-					throw new Error(`${req.method} <${req.url}> redirects to ${location}, which does not match ${dest}.`);
-				}
+			} else if (dest instanceof URLPattern && ! dest.test(loc.href)) {
+				throw new Error(`${req.method} <${req.url}> redirected to ${loc}, which does not match the URLPattern.`);
+			} else if (
+				dest instanceof URL
+				&& ! (
+					loc.origin === dest.origin
+					&& loc.pathname.startsWith(dest.pathname)
+					&& [...dest.searchParams.keys].every(param => loc.searchParams.has(param))
+				)
+			) {
+				throw new Error(`${req.method} <${req.url}> redirects to ${loc}, which does not match ${dest}.`);
 			}
 		};
 	}
@@ -885,8 +956,28 @@ export class RequestHandlerTest {
 			const origin = req.headers.get('Origin');
 
 			if (['*', origin].includes(resp.headers.get('Access-Control-Allow-Origin'))) {
-				throw new Error(`${req.method} [${req.method}] should allow not origin: ${origin}.`);
+				throw new Error(`${req.method} <[>${req.url}> should allow not origin: ${origin}.`);
 			}
+		}
+	}
+
+	/**
+	 * Validates that the response includes correct CORS headers when credentials are allowed.
+	 *
+	 * @param {Response} resp - The HTTP response object to validate.
+	 * @param {Request} req - The HTTP request object associated with the response.
+	 * @throws {Error} Throws an error if any of the following conditions are met:
+	 * - The `Access-Control-Allow-Credentials` header is missing in the response.
+	 * - The `Access-Control-Allow-Origin` header is missing in the response.
+	 * - The `Access-Control-Allow-Origin` header is set to `"*"` while credentials are allowed.
+	 */
+	static async shouldAllowCredentials(resp, req) {
+		if (! resp.headers.has('Access-Control-Allow-Credentials')) {
+			throw new Error(`${req.method} <[>${req.url}> is missing Access-Control-Allow-Credentials header.`);
+		} else if (! resp.headers.has('Access-Control-Allow-Origin')) {
+			throw new Error(`${req.method} <[>${req.url}> is missing Access-Control-Allow-Origin header.`);
+		} else if (resp.headers.get('Access-Control-Allow-Origin') === '*') {
+			throw new Error(`${req.method} <[>${req.url}> is Access-Control-Allow-Origin may not be "*" if credentials are allowed.`);
 		}
 	}
 
@@ -926,6 +1017,39 @@ export class RequestHandlerTest {
 	}
 
 	/**
+	 * Checks if a response has a specified header.
+	 *
+	 * @param {string} name The name of the required header.
+	 * @returns {function(Response, Request): void} A middleware function.
+	 *
+	 * @throws {Error} If the header is missing and the response status is successful.
+	 */
+	static shouldRequireHeader(name) {
+		return (resp, req) => {
+			if (resp.ok && ! req.headers.has(name)) {
+				throw new Error(`${req.method} <${req.url}> should require "${name}" header but returned a status of ${resp.status}.`);
+			}
+		};
+	}
+
+	/**
+	 * Checks if a response requires an authorization header.
+
+	* @param {Response} resp The response object.
+	* @param {Request} req The request object.
+
+	* @throws {Error} If the header is missing and the response status is not 401.
+	* @throws {Error} If the header is present and the response status is 401.
+	*/
+	static shouldRequireAuthorization(resp, req) {
+		if (! req.headers.has('Authorization') && resp.status !== UNAUTHORIZED) {
+			throw new Error(`${req.method} <${req.url}> should return a status of ${UNAUTHORIZED} if request is missing "Authorization" header but got ${resp.status}.`);
+		} else if (req.headers.has('Authorization') && resp.status === UNAUTHORIZED) {
+			throw new Error(`${req.method} <${req.url}> had required "Authorization" header but still got ${UNAUTHORIZED} Unauthorized.`);
+		}
+	}
+
+	/**
 	 * Checks if a given response and request combination allows the specified headers.
 	 *
 	 * Throws an error if the `Access-Control-Allow-Headers` header is missing or does not allow all specified headers.
@@ -933,15 +1057,15 @@ export class RequestHandlerTest {
 	 * @param {...string} headers The headers that should be allowed.
 	 * @returns {function(Response, Request): void} A function that can be used to check the response and request.
 	 */
-	static shouldAllowsHeaders(...headers) {
+	static shouldAllowHeaders(...headers) {
 		return (resp, req) => {
 			if (! resp.headers.has('Access-Control-Allow-Headers')) {
 				throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Headers.`);
 			} else {
-				const allowed = resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
+				const allowed = getAllHeader(resp, 'Access-Control-Allow-Headers');//resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
 				const missing = headers.filter(header => ! allowed.includes(header.toLowerCase()));
 
-				if (headers.length !== 0) {
+				if (missing.length !== 0) {
 					throw new Error(`${req.method} <${req.url}> misconfigured Access-Control-Allow-Headers should allow: [${missing.join(', ')}].`);
 				}
 			}
@@ -983,9 +1107,7 @@ export class RequestHandlerTest {
 		if (req.method === 'OPTIONS' && req.headers.has('Access-Control-Request-Headers')) {
 			if (resp.headers.has('Access-Control-Allow-Headers')) {
 				const reqHeaders = getAllHeader(req, 'Access-Control-Request-Headers');
-				//req.headers.get('Access-Control-Request-Headers').split(',').map(header => header.trim().toLowerCase());
 				const allowHeaders = getAllHeader(resp, 'Access-Control-Allow-Headers');
-				//resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
 				const disallowed = reqHeaders.filter(header => ! allowHeaders.includes(header));
 
 				if (disallowed.length !== 0) {
@@ -1058,6 +1180,24 @@ export class RequestHandlerTest {
 			}
 		} else if (resp.status !== METHOD_NOT_ALLOWED) {
 			throw new Error(`${req.method} <${req.url}> should not support HTTP method "${req.method}. Got status [${resp.status}]."`);
+		} else if (! resp.headers.has('Allow')) {
+			throw new Error(`${req.method} <${req.url}> not allowed, but is missing Allow header.`);
+		} else if (resp.headers.get('Allow').split(',').map(method => method.trim().toUpperCase()).includes(req.method)) {
+			throw new Error(`${req.method} <${req.url}> not allowed, but is listed as an allowed method.`);
+		}
+	}
+
+	/**
+	 * Checks if a given response has CORS headers.
+	 *
+	 * Throws an error if Access-Control-Allow-Origin is missing.
+	 *
+	 * @param {Response} resp The response object.
+	 * @param {Request} req The request object.
+	 */
+	static shouldBeCorsResponse(resp, req) {
+		if (! resp.headers.has('Access-Control-Allow-Origin')) {
+			throw new Error(`${req.method} <${req.url}> is missing required Access-Control-Allow-Origin header.`);
 		}
 	}
 
@@ -1195,20 +1335,20 @@ export class RequestHandlerTest {
 				case JSON_MIME:
 				case JSON_ALT:
 				case JSON_LD:
-					console.log(await resp.json());
+					console.log(await resp.clone().json());
 					break;
 
 				case FORM_MULTIPART:
 				case FORM_URL_ENCODED:
-					console.log(await resp.formData());
+					console.log(await resp.clone().formData());
 					break;
 
 				case TEXT:
-					console.log(await resp.text());
+					console.log(await resp.clone().text());
 					break;
 
 				default:
-					console.log(resp.headers.get('Content-Type').endsWith('+json') ? await resp.json() : await resp.blob());
+					console.log(resp.clone().headers.get('Content-Type').endsWith('+json') ? await resp.clone().json() : await resp.clone().blob());
 			}
 		}
 	}
@@ -1245,10 +1385,9 @@ export class RequestHandlerTest {
 
 			for (const result of results) {
 				if (result.status === 'rejected') {
-					// errs.push(result.reason);
 					if (result.reason instanceof AggregateError) {
 						errs.push(...result.reason.errors);
-					} else if (result.reason instanceof Error) {
+					} else if (result.reason instanceof Error || result.reason instanceof DOMException) {
 						errs.push(result.reason);
 					} else {
 						errs.push(new Error(result.reason));
@@ -1262,5 +1401,51 @@ export class RequestHandlerTest {
 				throw new AggregateError(errs, 'Some tests failed.');
 			}
 		};
+	}
+
+	/**
+	 * Loads and runs a list of test modules asynchronously.
+	 *
+	 * @param {...(string | URL)} tests An array of strings representing module paths (using dynamic imports) for test files.
+	 * @returns {Promise<{ error: Error | DOMException | null, success: Array<Response>, duration: number }>}
+	 *          A promise that resolves to an object with the following properties:
+	 *          - `error`: An error object if any test module failed to load or an `AggregateError` if multiple tests failed.
+	 *          - `success`: An array of returned responses.
+	 *          - `duration`: The time taken to load and run all tests in milliseconds.
+	 */
+	static async loadAndRunTests(...tests) {
+		const start = performance.now();
+
+		const results = await Promise.allSettled(tests.map(test => import(test)));
+
+		const errs = [];
+		const success = [];
+
+		for (const result of results) {
+			if (result.status === 'rejected') {
+				if (result.reason instanceof AggregateError) {
+					errs.push(...result.reason.errors);
+				} else if (result.reason instanceof Error || result.reason instanceof DOMException) {
+					errs.push(result.reason);
+				} else {
+					errs.push(new Error(result.reason));
+				}
+			} else {
+				success.push(result.result);
+			}
+		}
+
+		const duration = performance.now() - start;
+
+		switch(errs.length) {
+			case 0:
+				return { error: null, success, duration };
+
+			case 1:
+				return { error: errs[0], success, duration };
+
+			default:
+				return { error: new AggregateError(errs), success, duration };
+		}
 	}
 }

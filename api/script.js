@@ -23,12 +23,13 @@ export default createHandler({
 			mode: 'no-cors',
 			credentials: 'include',
 			referrerPolicy: 'origin',
-			headers: {
+			headers: new Headers({
 				'Content-Type': '${JSON_MIME}',
+				'X-Foo': 'Bar',
 				Accept: '${JSON_MIME}',
-			},
+			}),
 			body: '${JSON.stringify(reqData)}',
-		}).then(resp => resp.json()).then(console.log).catch(console.error);`;
+		}).then(async resp => ({ headers: Object.fromEntries(resp.headers), body: resp.json()})).then(console.log).catch(console.error);`;
 
 		return new Response([js], { headers });
 	}

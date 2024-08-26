@@ -1,11 +1,12 @@
 import { RequestHandlerTest } from '../RequestHandlerTest.js';
+import { TestRequest } from '../TestRequest.js';
 
 const { error } = await RequestHandlerTest.runTests(
 	new RequestHandlerTest(
-		new Request('https://example.com/api/polyfills', { redirect: 'manual' }),
+		new TestRequest('https://example.com/api/polyfills', { redirect: 'manual' }),
 		[
 			RequestHandlerTest.shouldRedirect,
-			RequestHandlerTest.shouldRedirectTo('https://unpkg.com/@shgysk8zer0/polyfills')
+			RequestHandlerTest.shouldRedirectTo(new URLPattern('https://unpkg.com/@shgysk8zer0/polyfills@:version/all.min.js'))
 		]
 	)
 );

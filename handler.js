@@ -1,6 +1,6 @@
 import '@shgysk8zer0/polyfills';
-import { HTTPError, HTTPLengthRequiredError, HTTPPayloadTooLargeError, HTTPUnauthorizedError } from './error.js';
-import { METHOD_NOT_ALLOWED, INTERNAL_SERVER_ERROR, NO_CONTENT, FORBIDDEN } from '@shgysk8zer0/consts/status.js';
+import { HTTPError, HTTPForbiddenError, HTTPInternalServerError, HTTPLengthRequiredError, HTTPMethodNotAllowedError, HTTPPayloadTooLargeError, HTTPUnauthorizedError } from './error.js';
+import { METHOD_NOT_ALLOWED, INTERNAL_SERVER_ERROR, NO_CONTENT } from '@shgysk8zer0/consts/status.js';
 import { isSameOriginRequest } from './utils.js';
 import { contextFallback } from './context.js';
 import { NetlifyRequest } from './NetlifyRequest.js';
@@ -13,7 +13,7 @@ const ACAH = 'Access-Control-Allow-Headers';
 const ACRH = 'Access-Control-Request-Headers';
 const ACEH = 'Access-Control-Expose-Headers';
 
-// const between = (min, val, max) => ! (val > max || val < min);
+const NO_BODY_METHODS = ['HEAD', 'GET', 'OPTIONS', 'DELETE'];
 
 export function createOptionsHandler(methods) {
 	return async function() {
@@ -28,7 +28,7 @@ export function createOptionsHandler(methods) {
 	};
 }
 
-function addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders } = {}) {
+function addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders, methods } = {}) {
 	try {
 		if (req instanceof Request && req.headers.has('Origin')) {
 			const origin = URL.parse(req.headers.get('Origin'))?.origin;
@@ -37,14 +37,20 @@ function addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredential
 				resp.headers.set(ACAC, 'true');
 			}
 
-			if (resp.headers.has(ACAC) && isAllowedOrigin(req, allowOrigins) && (resp.headers.get(ACAO) === '*' || ! resp.headers.has(ACAO)) ) {
+			if (
+				resp.headers.has(ACAC)
+				&& typeof origin === 'string'
+				&& isAllowedOrigin(req, allowOrigins)
+				&& (! resp.headers.has(ACAO) || resp.headers.get(ACAO) === '*')
+			) {
 				resp.headers.set(ACAO, origin);
 			} else if (!resp.headers.has(ACAO) && (typeof allowOrigins === 'undefined' || isAllowedOrigin(req, allowOrigins))) {
 				resp.headers.set(ACAO, '*');
 			}
 
 			if (
-				(Array.isArray(allowHeaders) && allowHeaders.length !== 0)
+				Array.isArray(allowHeaders)
+				&& allowHeaders.length !== 0
 				&& ! resp.headers.has(ACAH)
 			) {
 				resp.headers.set(ACAH, allowHeaders.join(', '));
@@ -54,6 +60,10 @@ function addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredential
 
 			if (Array.isArray(exposeHeaders) && exposeHeaders.length !== 0 && ! req.headers.has(ACEH)) {
 				resp.headers.set(ACEH, exposeHeaders.join(', '));
+			}
+
+			if (resp.status === METHOD_NOT_ALLOWED && ! resp.headers.has('Allow') && Array.isArray(methods)) {
+				resp.headers.set('Allow', methods.join(', '));
 			}
 		}
 	} catch(err) {
@@ -96,7 +106,7 @@ export function isAllowedOrigin(req, allowOrigins) {
  * @param {boolean} [options.allowCredentials=false] - Whether to allow credentials (cookies, authorization headers, etc.).
  * @param {string|string[]} [options.exposeHeaders] - Headers to expose to the client. Can be a string or an array of strings.
  * @param {number} [options.maxContentLength] - Maximum size allowed via Content-Length headers.
- * @param {function(Error, Request)} [options.logger=console.error] - A function to log errors. It receives the error object and the request as arguments.
+ * @param {function(Error, Request)} [options.logger] - A function to log errors. It receives the error object and the request as arguments.
  * @returns {function(Request, *): Promise<Response>} An async request handler function.
  *
  * @throws {TypeError} If the first argument is not a Request object.
@@ -110,6 +120,7 @@ export function createHandler(handlers, {
 	requireSameOrigin = false,
 	maxContentLength = NaN,
 	requireCredentials = false,
+	requireContentLength = false,
 	logger,
 } = {}) {
 	if ((typeof handlers !== 'object' || handlers === null)) {
@@ -124,14 +135,20 @@ export function createHandler(handlers, {
 		throw new TypeError('Cannot require both CORS and Same-Origin.');
 	}
 
+	if (! (handlers.head instanceof Function)) {
+		handlers.head = async () => new Response(null, { status: NO_CONTENT });
+	}
+
 	if (! (handlers.options instanceof Function)) {
 		handlers.options = createOptionsHandler(methods, { allowHeaders, allowOrigins });
 	}
 
+
 	return async (orig, context = contextFallback) => {
 		try {
 			if (
-				orig.headers.has('Content-Length')
+				! Number.isNaN(maxContentLength)
+				&& orig.headers.has('Content-Length')
 				&& (Number.isSafeInteger(maxContentLength) && maxContentLength >= 0)
 				&& parseInt(orig.headers.get('Content-Length')) > maxContentLength
 			 ) {
@@ -141,41 +158,46 @@ export function createHandler(handlers, {
 						maxContentLength,
 					},
 				});
-			} else if (orig.body instanceof ReadableStream && ! orig.headers.has('Content-Length')) {
+			} else if (
+				requireContentLength
+				&& ! NO_BODY_METHODS.includes(orig.method)
+				&& orig.body instanceof ReadableStream
+				&& ! orig.headers.has('Content-Length')
+			) {
 				throw new HTTPLengthRequiredError('Request is missing required Content-Length header.');
 			}
 
 			const req = new NetlifyRequest(orig, context);
 
 			if (requireCredentials && ! req.credentials === 'include') {
-				throw new HTTPUnauthorizedError(`${req.url} requires credentials.`);
+				return new HTTPUnauthorizedError(`${req.url} requires credentials.`).response;
 			} else if (requireSameOrigin && ! req.isSameOrigin) {
-				throw new HTTPError('Must be a same-origin request.', FORBIDDEN);
+				return new HTTPForbiddenError('Must be a same-origin request.').response;
 			} else if (
 				requireCORS
 				&& ! isSameOriginRequest(req)
 				&& Array.isArray(allowOrigins) && allowOrigins.length !== 0
 				&& ! isAllowedOrigin(req, allowOrigins)
 			) {
-				throw new HTTPError(`Disallowed Origin: ${req.headers.get('Origin')}.`, FORBIDDEN);
+				return new HTTPForbiddenError(`Disallowed Origin: ${req.headers.get('Origin')}.`).response;
 			} else if (! (handlers[req.method.toLowerCase()] instanceof Function)) {
-				throw new HTTPError(`Unsupported request method: ${req.method}`, METHOD_NOT_ALLOWED, {
-					headers: { Allow: Object.keys(handlers).map(method => method.toUpperCase()).join(', ') },
-				});
+				return new HTTPMethodNotAllowedError(`Unsupported request method: ${req.method}`, {
+					headers: { Allow: methods.join(', ').toUpperCase() },
+				}).response;
 			} else {
 				const resp = await handlers[req.method.toLowerCase()].call(context, req, context);
 
 				if (resp instanceof Response) {
 					if (resp.status === 0) {
 						const resp = new HTTPError('Something broke :(', INTERNAL_SERVER_ERROR).response();
-						addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+						addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders, methods });
 						return resp;
 					} else {
-						addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+						addCorsHeaders(resp, req, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders, methods });
 						return resp;
 					}
 				} else {
-					throw new HTTPError('Invalid response.', INTERNAL_SERVER_ERROR);
+					return new HTTPInternalServerError('Invalid response.').response;
 				}
 			}
 		} catch (err) {
@@ -185,7 +207,7 @@ export function createHandler(handlers, {
 
 			if (err instanceof HTTPError) {
 				const resp = Response.json(err, { status: err.status, headers: new Headers(err.headers) });
-				return addCorsHeaders(resp, orig, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+				return addCorsHeaders(resp, orig, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders, methods });
 			} else {
 				const resp = Response.json({
 					error: {
@@ -197,7 +219,7 @@ export function createHandler(handlers, {
 					headers: new Headers({ [ACAO]: '*' }),
 				});
 
-				return addCorsHeaders(resp, orig, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders });
+				return addCorsHeaders(resp, orig, { allowHeaders, allowOrigins, allowCredentials, exposeHeaders, methods });
 			}
 		}
 	};

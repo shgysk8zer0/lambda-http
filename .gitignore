@@ -1,4 +1,5 @@
 .netlify/
+.vscode/
 *.cjs
 !api/*.cjs
 *.mjs
