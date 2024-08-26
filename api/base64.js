@@ -1,8 +1,7 @@
 import { createHandler } from '../handler.js';
-import { HTTPError } from '@shgysk8zer0/consts/error.js';
-import { BAD_REQUEST } from '@shgysk8zer0/consts/status.js';
 
-async function base64Encode(blob) {
+async function base64Encode(req) {
+	const blob = await req.blob();
 	const bytes = await blob.bytes();
 
 	return new Response(`data:${blob.type || 'text/plain'};base64,${bytes.toBase64()}`, {
@@ -12,23 +11,5 @@ async function base64Encode(blob) {
 
 export default createHandler({
 	put: base64Encode,
-	async post(req) {
-		if (req.isFormData) {
-			const data = await req.formData();
-
-			if (data.has('file')) {
-				const file = data.get('file');
-
-				if (! (file instanceof File)) {
-					throw new HTTPError('Form field "file" must be a File object.', BAD_REQUEST);
-				} else {
-					return await base64Encode(file);
-				}
-			} else {
-				throw new HTTPError('Missing required form data field: "file".', BAD_REQUEST);
-			}
-		} else {
-			return await base64Encode(await req.blob());
-		}
-	}
-});
+	post: base64Encode,
+}, { logger: err => console.error(err) });

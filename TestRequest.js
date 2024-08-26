@@ -8,11 +8,12 @@ const DESTINATIONS = [
 export class TestRequest extends Request {
 	#destination = '';
 
-	constructor(url, { token, destination = '', searchParams, ...config } = {}) {
+	constructor(url, { token, destination = '', searchParams, signal = AbortSignal.timeout(1000), ...config } = {}) {
 		const reqURL = new URL(url);
 		reqURL.search = new URLSearchParams(searchParams);
 
-		super(reqURL, config);
+
+		super(reqURL, { signal, ...config });
 
 		if (! DESTINATIONS.includes(destination)) {
 			throw new TypeError(`Invalid destination: ${destination}.`);
@@ -29,19 +30,27 @@ export class TestRequest extends Request {
 			} else if (config.body instanceof ArrayBuffer) {
 				this.headers.set('Content-Length', new Uint8Array(config.body).byteLength);
 			} else if (config.body instanceof FormData) {
-				let length = 0;
+				const boundary = this.headers.get('Content-Type').substring(30);
+				const entries = [...config.body.entries()];
+				const boundaryLength = boundary.length + 2;
 
-				for (const [key, val] of config.body.entries()) {
-					length += key.length;
+				let length = boundaryLength * (entries.length + 1) + 2;
+
+				for (const [key, val] of entries) {
+					length += `Content-Disposition: form-data; name="${key}"`.length + 4;
 
 					if (typeof val === 'string') {
-						length += val.length;
-					} else if (val instanceof Blob) {
-						length += val.size;
+						length += val.length + 4;
+					} else if(val instanceof File) {
+						length += ` ; filename="${val.name}" Content-Type: ${val.type}`.length + val.size + 4;
+					} else {
+						throw new TypeError('FormData may only contain strings and files.');
 					}
-
-					this.headers.set('Content-Length', length);
 				}
+
+				this.headers.set('Content-Length', length);
+			} else if (config.body instanceof URLSearchParams) {
+				this.headers.set('Content-Length', config.body.toString().length);
 			} else if (config.body instanceof Uint8Array) {
 				this.headers.set('Content-Length', config.body.byteLength);
 			}
@@ -50,6 +59,7 @@ export class TestRequest extends Request {
 		if (typeof token === 'string') {
 			this.headers.set('Authorization', `Bearer ${token}`);
 		}
+
 		if (! this.headers.has('Sec-Fetch-Mode')) {
 			this.headers.set('Sec-Fetch-Mode', this.mode);
 		}
@@ -68,20 +78,20 @@ export class TestRequest extends Request {
 	}
 
 	static json(data, url, { method = 'POST', headers = new Headers(), ...config } = {}) {
-		config.body = JSON.stringify(data);
+		const body = new Blob([JSON.stringify(data)], { type: 'application/json' });
 
 		if (! (headers instanceof Headers)) {
 			headers = new Headers(headers);
 		}
 
-		if (! headers.has('Content-Type')) {
-			headers.set('Content-Type', 'application/json');
-		}
-
 		if (! headers.has('Content-Length')) {
-			headers.set('Content-Length', config.body.length);
+			headers.set('Content-Length', body.size);
 		}
 
-		return new TestRequest(url, { method, headers, ...config });
+		if (! headers.has('Content-Type')) {
+			headers.set('Content-Type', body.type);
+		}
+
+		return new TestRequest(url, { method, headers, ...config, body });
 	}
 }

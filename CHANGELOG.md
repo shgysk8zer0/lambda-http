@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.2] - 2024-08-26
+
+### Added
+- Numerous more tests!
+
+### Fixed
+- Fix an error cloning requests with multipart/form-data
+
 ## [v1.1.1] - 2024-08-22
 
 ### Added

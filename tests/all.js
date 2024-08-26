@@ -1,32 +1,22 @@
-const start = performance.now();
+import { RequestHandlerTest } from '../RequestHandlerTest.js';
 
-const results = await Promise.allSettled([
-	import('./echo.js'),
-	import('./error.js'),
-	import('./page.js'),
-	import('./svg.js'),
-	import('./script.js'),
-	import('./redirect.js'),
-	import('./reset.js'),
-	import('./polyfills.js'),
-]);
+const { error, duration } = await RequestHandlerTest.loadAndRunTests(
+	import.meta.resolve('./base64.js'),
+	import.meta.resolve('./cors.js'),
+	import.meta.resolve('./dne.js'),
+	import.meta.resolve('./echo.js'),
+	import.meta.resolve('./error.js'),
+	import.meta.resolve('./hash.js'),
+	import.meta.resolve('./page.js'),
+	import.meta.resolve('./polyfills.js'),
+	import.meta.resolve('./redirect.js'),
+	import.meta.resolve('./reset.js'),
+	import.meta.resolve('./script.js'),
+	import.meta.resolve('./svg.js'),
+);
 
-const errs = [];
+console.info(`Tests completed in ${duration}ms.`);
 
-for (const result of results) {
-	if (result.status === 'rejected') {
-		if (result.reason instanceof AggregateError) {
-			errs.push(...result.reason.errors);
-		} else {
-			errs.push(result.reason);
-		}
-	}
+if (error instanceof Error || error instanceof DOMException) {
+	throw error;
 }
-
-if (errs.length === 1) {
-	throw errs[0];
-} else if (errs.length !== 0) {
-	throw new AggregateError(errs, 'Some tests failed.');
-}
-
-console.log(`Tests ran in ${performance.now() - start} ms.`);

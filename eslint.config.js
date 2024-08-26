@@ -18,7 +18,7 @@ export default [
 		languageOptions: {
 			ecmaVersion: 'latest',
 			sourceType: 'module',
-			globals: globals.node,
+			globals: { ...globals.node, URLPattern: false },
 		}
 	}
 ];

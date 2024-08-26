@@ -4,6 +4,7 @@ const JSON_ALT = 'text/json'; // Alternate JSON Mime-Type
 
 const noCookies = () => console.warn('No Cookies provided by context object.');
 const cookieFallback = Object.freeze({ delete: noCookies, get: noCookies, set: noCookies });
+// let called = false;
 
 export class NetlifyRequest extends Request {
 	#accept;
@@ -22,19 +23,22 @@ export class NetlifyRequest extends Request {
 	constructor(req, context) {
 		if (! (req instanceof Request)) {
 			throw new TypeError('Cannot create from a non-Request object.');
+		} else if (req.bodyUsed) {
+			throw new TypeError('Requst body has already been used and is unreadable.');
 		} else {
 			const url = new URL(req.url);
 
-			if (req.headers.has('Host')) {
-				url.host = req.headers.get('Host');
-			} else if (typeof context?.site?.url === 'string') {
+			if (URL.canParse(context?.site?.url)) {
 				url.host = new URL(context.site.url).host;
+			} else if (URL.canParse(req.headers.has('Host'))) {
+				url.host = new URL(req.headers.get('Host')).host;
 			}
 
 			super(url, {
 				headers: req.headers,
 				method: req.method,
-				body: req.body,
+				body: req.body instanceof ReadableStream ? req.body : null,
+				signal: req.signal,
 				credentials: (req.headers.has('Cookie') || req.headers.has('Authorization')) ? 'include' : 'omit',
 				duplex: req.body instanceof ReadableStream ? 'half' : undefined, // Required in node for anything with a body
 			});
@@ -97,12 +101,52 @@ export class NetlifyRequest extends Request {
 		return this.#context?.geo ?? {};
 	}
 
+	get domian() {
+		return this.#url.domian;
+	}
+
+	get hash() {
+		return this.#url.hash;
+	}
+
 	get host() {
 		return this.#url.host;
 	}
 
 	get hostname() {
 		return this.#url.hostname;
+	}
+
+	get origin() {
+		return this.#url.origin;
+	}
+
+	get password() {
+		return this.#url.password;
+	}
+
+	get pathname() {
+		return this.#url.pathname;
+	}
+
+	get port() {
+		return this.#url.port;
+	}
+
+	get protocol() {
+		return this.#url.protocol;
+	}
+
+	get search() {
+		return this.#url.search;
+	}
+
+	get searchParams() {
+		return this.#url.searchParams;
+	}
+
+	get username() {
+		return this.#url.username;
 	}
 
 	get ipAddress() {
@@ -122,6 +166,9 @@ export class NetlifyRequest extends Request {
 
 		if (this.headers.has('Sec-Fetch-Site') && this.headers.get('Sec-Fetch-Site') !== 'same-origin') {
 			return false;
+		} else if (origin === null && this.#url.protocol === 'file:' && this.referrer.startsWith('file:///')) {
+			// Treat being imported from filesystem as same origin based on same protocol
+			return true;
 		} else if (this.headers.has('Origin') && URL.parse(this.headers.get('Origin'))?.origin === origin) {
 			return true;
 		} else if (this.#referrer === 'client' || this.#referrer === 'about:client') {
@@ -145,14 +192,6 @@ export class NetlifyRequest extends Request {
 		return this.#mode;
 	}
 
-	get origin() {
-		return this.#url.origin;
-	}
-
-	get pathname() {
-		return this.#url.pathname;
-	}
-
 	get referrer() {
 		return this.#referrer;
 	}
@@ -163,14 +202,6 @@ export class NetlifyRequest extends Request {
 
 	get requestId() {
 		return this.#context?.requestId ?? '0';
-	}
-
-	get search() {
-		return this.#url.search;
-	}
-
-	get searchParams() {
-		return this.#url.searchParams;
 	}
 
 	get url() {
@@ -192,6 +223,7 @@ export class NetlifyRequest extends Request {
 	}
 
 	clone() {
+		// return new NetlifyRequest(this.#originalRequest.clone(), this.#context);
 		return new NetlifyRequest(super.clone(), this.#context);
 	}
 

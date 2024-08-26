@@ -11,12 +11,13 @@ export default createHandler({
 
 		const theme = new Cookie({
 			name: 'theme',
-			value: req.cookies.get('theme') ?? 'light dark',
+			value: req.cookies.get('theme') ?? 'dark',
 			expires: Date.now() + 3_600_000,
 			path: url,
 			domain: url,
 			sameSite: 'lax',
-			httpOnly: false,
+			httpOnly: true,
+			secure: true,
 		});
 
 		const uid = new Cookie({
@@ -27,6 +28,7 @@ export default createHandler({
 			domain: url,
 			sameSite: 'lax',
 			httpOnly: true,
+			secure: true,
 		});
 
 		headers.append('Set-Cookie', theme);

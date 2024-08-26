@@ -1,22 +1,43 @@
-import { PAYLOAD_TOO_LARGE } from '@shgysk8zer0/consts/status.js';
+import { NO_CONTENT, PAYLOAD_TOO_LARGE } from '@shgysk8zer0/consts/status.js';
 import { RequestHandlerTest } from '../RequestHandlerTest.js';
 import { TestRequest } from '../TestRequest.js';
+import { OCTET_STREAM } from '@shgysk8zer0/consts/mimes.js';
+
+function createRandomFile(size = 1, name= 'file.ext', {
+	type = OCTET_STREAM,
+	lastModified = Date.now(),
+	endings = 'transparent',
+} = {}) {
+	return new File([crypto.getRandomValues(new Uint8Array(size))], name, { type, lastModified, endings });
+}
+
+function createRandomBlob(size = 1, {
+	type = OCTET_STREAM,
+	endings = 'transparent'
+} = {}) {
+	return new File([crypto.getRandomValues(new Uint8Array(size))], { type, endings });
+}
+
+function createFormData(data) {
+	return Object.entries(data).reduce((fd, [key, val]) => {
+		fd.set(key, val);
+		return fd;
+	}, new FormData());
+}
 
 const origin = 'http://localhost:8888';
 const url = new URL('/api/echo', origin);
 const referrer = origin;
-const body = new FormData();
-body.set('foo', 'bar');
-const file = new Blob([crypto.getRandomValues(new Uint8Array(5000))], { type: 'application/octet-stream' });
-body.set('file', file);
 
 const headers = {
 	'Origin': origin,
 };
 
+const signal = AbortSignal.timeout(500);
+
 const { error } = await RequestHandlerTest.runTests(
 	new RequestHandlerTest(
-		new TestRequest(url, { headers, referrer, searchParams: { test: 'basic' }}),
+		new TestRequest(url, { headers, referrer, signal, searchParams: { test: 'basic' }}),
 		[
 			RequestHandlerTest.shouldRequireSameOrigin,
 			RequestHandlerTest.shouldBeOk,
@@ -29,17 +50,20 @@ const { error } = await RequestHandlerTest.runTests(
 	new RequestHandlerTest(
 		new TestRequest(url, {
 			method: 'POST',
+			searchParams: { test: 'blob-body' },
 			headers,
-			body: new Blob([crypto.getRandomValues(new Uint8Array(65_536))], { type: 'application/octet-stream' }),
+			referrer,
+			signal,
+			body: createRandomBlob(63_000),
 		}),
-		[RequestHandlerTest.shouldHaveStatus(PAYLOAD_TOO_LARGE)]
+		[RequestHandlerTest.shouldHaveStatus(PAYLOAD_TOO_LARGE)],
 	),
 	new RequestHandlerTest(
-		TestRequest.json({ now: Date.now() }, url, { headers, searchParams: { test: 'json' }}),
+		TestRequest.json({ now: Date.now() }, url, { headers, referrer, signal, searchParams: { test: 'json' }}),
 		RequestHandlerTest.shouldBeOk
 	),
 	new RequestHandlerTest(
-		new TestRequest(url, { referrer }),
+		new TestRequest(url, { referrer, signal, searchParams: { test: 'json-keys' }}),
 		[RequestHandlerTest.shouldHaveJSONKeys('url', 'headers')]
 	),
 	new RequestHandlerTest(
@@ -47,39 +71,65 @@ const { error } = await RequestHandlerTest.runTests(
 			searchParams: { test: 'invalid-method' },
 			method: 'PATCH',
 			headers,
-			body: body.get('file'),
+			signal,
+			body: createRandomBlob(),
 		}),
 		RequestHandlerTest.shouldNotAllowMethod
 	),
 	new RequestHandlerTest(
-		new Request(url + '?4'),
+		new TestRequest(url, { signal, searchParams: { test: 'no-headers' }}),
 		RequestHandlerTest.shouldClientError
+	),
+	 new RequestHandlerTest(
+		new TestRequest(url, {
+			method: 'POST',
+			searchParams: { name: 'file' },
+			headers,
+			referrer,
+			signal,
+			body: createRandomFile(3000),
+		}),
+		[RequestHandlerTest.shouldBeOk, RequestHandlerTest.shouldBeJSON]
+	 ),
+	new RequestHandlerTest(
+		new TestRequest(url, {
+			searchParams: { test: 'url-form-data' },
+			method: 'POST',
+			headers,
+			referrer,
+			signal,
+			body: new URLSearchParams(createFormData({ foo: 'bar', num: 42 })),
+		}),
+		[RequestHandlerTest.shouldBeOk]
 	),
 	new RequestHandlerTest(
 		new TestRequest(url, {
-			searchParams: { test: 'form-data' },
+			searchParams: { test: 'multipart-form-data' },
 			method: 'POST',
 			headers,
-			body,
-		})
+			referrer,
+			signal,
+			body: createFormData({ foo: 'bar', num: 42 })
+		}),
+		[RequestHandlerTest.shouldBeOk]
 	),
 	new RequestHandlerTest(
-		new TestRequest(url + '?test=cross-origin', {
-			headers: {
-				...headers,
-				Origin: 'https://not-allowed.org',
-				// Referer: 'about:client'
-			},
+		new TestRequest(url, {
+			searchParams: { test: 'cross-origin' },
+			headers: { Origin: 'https://not-allowed.org' },
 			referrer: 'about:client',
 			mode: 'cors',
+			signal,
 			referrerPolicy: 'no-referrer',
 		}),
-		[RequestHandlerTest.shouldDisallowOrigin, RequestHandlerTest.shouldRequireSameOrigin, RequestHandlerTest.shouldClientError]
+		[RequestHandlerTest.shouldDisallowOrigin, RequestHandlerTest.shouldRequireSameOrigin, RequestHandlerTest.shouldClientError],
 	),
 	new RequestHandlerTest(
-		new TestRequest(url + '?test=options', {
+		new TestRequest(url, {
+			searchParams: { test: 'options' },
 			method: 'OPTIONS',
 			referrer,
+			signal,
 			headers: {
 				'Access-Control-Request-Method': 'POST',
 				'Access-Control-Request-Headers': 'X-Foo',
@@ -89,8 +139,16 @@ const { error } = await RequestHandlerTest.runTests(
 		[
 			RequestHandlerTest.shouldExposeHeaders('X-Bar'),
 			RequestHandlerTest.shouldNotExposeHeaders('X-Bazz'),
+			RequestHandlerTest.shouldAllowHeaders('X-Foo', 'Authorization'),
 			RequestHandlerTest.shouldPassPreflight,
 		]
+	),
+	new RequestHandlerTest(
+		new TestRequest(url, {
+			method: 'HEAD',
+			referrer,
+		}),
+		[RequestHandlerTest.shouldHaveStatus(NO_CONTENT), RequestHandlerTest.shouldNotHaveBody]
 	)
 );
 

@@ -12,7 +12,7 @@ export default createHandler({
 	}
 }, {
 	allowOrigins: ['http://localhost:9999', 'http://localhost:8888'],
-	allowHeaders: ['X-Foo'],
+	// allowHeaders: ['X-Foo'],
 	exposeHeaders: ['X-Foo'],
 	allowCredentials: true,
 	// logger: console.error,
