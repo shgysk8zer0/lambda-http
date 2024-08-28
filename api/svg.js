@@ -24,6 +24,4 @@ export default createHandler({
 
 		return new Response(svg, { headers });
 	}
-}, {
-	logger: err => console.error(err),
 });

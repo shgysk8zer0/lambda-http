@@ -6,8 +6,10 @@ import { contextFallback as context } from './context.js';
 
 const addExtension = (src, ext = 'js') => /\.(c|m)?js$/.test(src) ? src : `${src}.${ext}`;
 
+const ROOT = 'process' in globalThis && process.cwd instanceof Function ? `file://${process.cwd()}/` : globalThis?.document?.baseURI;
 
-export function getFileURL(src, base = `file://${process.cwd()}/`) {
+
+export function getFileURL(src, base = ROOT) {
 	if (src instanceof URL) {
 		return URL.parse(src.pathname, base);
 	} else if (typeof src==='string' && URL.canParse(src) && ! src.startsWith('file:')) {
@@ -29,6 +31,8 @@ export async function loadModuleHandler(src) {
 	} catch(err) {
 		if (err instanceof HTTPError) {
 			throw err;
+		} else if (err instanceof SyntaxError) {
+			throw new HTTPInternalServerError(`<${src}> module contains errors`, { cause: err });
 		} else {
 			throw new HTTPNotFoundError(`<${src}> not found.`, { cause: err });
 		}

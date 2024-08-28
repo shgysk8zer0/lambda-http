@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.3] - 2024-08-28
+
+### Added
+- More request validation (headers, search params)
+- More tests
+- Constants for various HTTP Headers, etc (avoids typos)
+- Add support for `URLPattern` in `allowOrigins`
+- Support multiple types of return values and convert to `Response` (eg `Blob`, `URL`, numbers) as best as reasonable
+
 ## [v1.1.2] - 2024-08-26
 
 ### Added

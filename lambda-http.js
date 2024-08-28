@@ -10,6 +10,7 @@ export * from './document.js';
 export * from './cookies.js';
 export * from './NetlifyRequest.js';
 export * from './error.js';
+export * from './consts.js';
 export { createHandler };
 export { TestRequest } from './TestRequest.js';
 export default createHandler;

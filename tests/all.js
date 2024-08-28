@@ -1,6 +1,7 @@
 import { RequestHandlerTest } from '../RequestHandlerTest.js';
 
 const { error, duration } = await RequestHandlerTest.loadAndRunTests(
+	import.meta.resolve('./auth.js'),
 	import.meta.resolve('./base64.js'),
 	import.meta.resolve('./cors.js'),
 	import.meta.resolve('./dne.js'),

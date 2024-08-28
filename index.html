@@ -24,19 +24,31 @@
 
 					const encoded = await resp.text();
 					document.getElementById('encoded').textContent = encoded;
-				})
-			})
+				});
+
+				document.forms.echo.addEventListener('submit', async event => {
+					event.preventDefault();
+
+					const resp = await fetch('{{ BASE }}echo', {
+						method: 'POST',
+						headers: { 'X-Foo': 'bar' },
+						body: new FormData(event.target),
+					});
+
+					console.log(resp);
+				});
+			});
 		</script>
 	</head>
 	<body>
 		<p>{{ MESSAGE }}</p>
 		<p>Last updated: <time datetime="{{ TIMESTAMP }}">{{ DATE }}</time></p>
 		<div><a href="{{ BASE }}echo">Test Echo</a></div>
-		<iframe src="{{ BASE }}echo" referrerpolicy="origin" sandbox="" credentialless="" width="600" height="800"></iframe>
+		<!-- <iframe src="{{ BASE }}echo" referrerpolicy="origin" sandbox="" credentialless="" width="600" height="800"></iframe> -->
 		<pre><code>{{ REQUEST }}</code></pre>
 		<pre><code>{{ JSON }}</code></pre>
 		<img src="{{ BASE }}svg" referrerpolicy="no-referrer" />
-		<form method="post" action="{{ BASE }}echo" rel="noreferrer" target="_blank" enctype="multipart/form-data">
+		<form id="echo" method="post" action="{{ BASE }}echo" rel="noreferrer" target="_blank" enctype="multipart/form-data">
 			<fieldset>
 				<legend>Form Test</legend>
 				<div>

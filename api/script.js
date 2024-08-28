@@ -3,7 +3,6 @@ import { JSON as JSON_MIME, JS } from '@shgysk8zer0/consts/mimes.js';
 
 export default createHandler({
 	async get(req) {
-		const headers = new Headers({ 'Content-Type': JS });
 		const reqData = {
 			url: req.url,
 			method: req.method,
@@ -20,7 +19,7 @@ export default createHandler({
 
 		const js = `fetch('./echo', {
 			method: 'POST',
-			mode: 'no-cors',
+			mode: 'cors',
 			credentials: 'include',
 			referrerPolicy: 'origin',
 			headers: new Headers({
@@ -29,8 +28,8 @@ export default createHandler({
 				Accept: '${JSON_MIME}',
 			}),
 			body: '${JSON.stringify(reqData)}',
-		}).then(async resp => ({ headers: Object.fromEntries(resp.headers), body: resp.json()})).then(console.log).catch(console.error);`;
+		}).then(async resp => ({ headers: Object.fromEntries(resp.headers), body: await resp.json()})).then(console.log).catch(console.error);`;
 
-		return new Response([js], { headers });
+		return new Response(js, { headers: { 'Content-Type': JS }});
 	}
 });

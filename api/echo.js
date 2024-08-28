@@ -60,14 +60,11 @@ async function createResponse(req) {
 export default createHandler(Object.fromEntries([
 	...['get', 'delete', 'post', 'put'].map(method => [method, createResponse]),
 ]), {
-	allowOrigins: ['http://localhost:9999', 'http://localhost:8888'],
+	allowOrigins: new URLPattern({ hostname: 'localhost', port: ':port(8888|9999)' }),
 	allowHeaders: ['X-Foo', 'Authorization', 'Content-Type'],
 	exposeHeaders: ['X-Bar'],
 	allowCredentials: true,
 	maxContentLength: 50_000,
-	// requireCORS: true,
 	requireSameOrigin: true,
-	// logger(err) {
-	// 	console.error(err);
-	// }
+	requireHeaders: ['X-Foo'],
 });

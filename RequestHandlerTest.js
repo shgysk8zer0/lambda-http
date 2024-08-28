@@ -5,6 +5,7 @@ import { NetlifyRequest } from './NetlifyRequest.js';
 import { HTML, JSON as JSON_MIME, JSON_LD, FORM_MULTIPART, FORM_URL_ENCODED, TEXT } from '@shgysk8zer0/consts/mimes.js';
 import { loadModuleHandler, getFileURL } from './utils.js';
 import { HTTPError } from './error.js';
+import { ACAO, ACAC, ACAM, ACAH, ACRM, ACRH, ACEH, LOC, AUTH, CONTENT_TYPE, ORIGIN, ACCEPT, ALLOW } from './consts.js';
 
 const between = (min, val, max) => ! (val < min || max > max);
 
@@ -180,7 +181,7 @@ export class RequestHandlerTest {
 			return false;
 		} else if (this.#response.redirected) {
 			return true;
-		} else if (REDIRECT_STATUSES.includes(this.#response.status) && this.#response.headers.has('Location')) {
+		} else if (REDIRECT_STATUSES.includes(this.#response.status) && this.#response.headers.has(LOC)) {
 			return true;
 		} else {
 			return false;
@@ -228,7 +229,7 @@ export class RequestHandlerTest {
 	 * @returns {string | null} The Content-Type header value, or null if the response does not have a Content-Type header.
 	 */
 	get contentType() {
-		return this.headers.get('Content-Type');
+		return this.headers.get(CONTENT_TYPE);
 	}
 
 	/**
@@ -442,10 +443,10 @@ export class RequestHandlerTest {
 	allowsOrigin(origin) {
 		if (typeof origin !== 'string' || ! (this.#response instanceof Response)) {
 			return false;
-		} else if (! this.#response.headers.has('Access-Control-Allow-Origin')) {
+		} else if (! this.#response.headers.has(ACAO)) {
 			return false;
 		} else {
-			const allowed = this.#response.headers.get('Access-Control-Allow-Origin');
+			const allowed = this.#response.headers.get(ACAO);
 
 			if (allowed === '*') {
 				return true;
@@ -550,28 +551,28 @@ export class RequestHandlerTest {
 	}
 
 	/**
-	 * Throws an error if the response status is NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 * Throws an error if the response status is NOT_ACCEPTABLE and the request header ACCEPT is present.
 	 *
 	 * @param {Response} resp - The response object.
 	 * @param {NetlifyRequest} req - The Netlify request object.
-	 * @throws {Error} If the response status is NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 * @throws {Error} If the response status is NOT_ACCEPTABLE and the request header ACCEPT is present.
 	 */
 	static shouldAccept(resp, req) {
-		if (req.headers.has('Accept') && resp.status === NOT_ACCEPTABLE) {
-			throw new Error(`${req.method } <${req.url}> should accept ${req.headers.get('Accept')}.`);
+		if (req.headers.has(ACCEPT) && resp.status === NOT_ACCEPTABLE) {
+			throw new Error(`${req.method } <${req.url}> should accept ${req.headers.get(ACCEPT)}.`);
 		}
 	}
 
 	/**
-	 * Throws an error if the response status is not NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 * Throws an error if the response status is not NOT_ACCEPTABLE and the request header ACCEPT is present.
 	 *
 	 * @param {Response} resp - The response object.
 	 * @param {NetlifyRequest} req - The Netlify request object.
-	 * @throws {Error} If the response status is not NOT_ACCEPTABLE and the request header 'Accept' is present.
+	 * @throws {Error} If the response status is not NOT_ACCEPTABLE and the request header ACCEPT is present.
 	 */
 	static shouldNotAccept(resp, req) {
-		if (req.headers.has('Accept') && resp.status !== NOT_ACCEPTABLE) {
-			throw new Error(`${req.method } <${req.url}> should not accept ${req.headers.get('Accept')}.`);
+		if (req.headers.has(ACCEPT) && resp.status !== NOT_ACCEPTABLE) {
+			throw new Error(`${req.method } <${req.url}> should not accept ${req.headers.get(ACCEPT)}.`);
 		}
 	}
 
@@ -584,10 +585,10 @@ export class RequestHandlerTest {
 	 */
 	static shouldHaveContentType(type) {
 		return (resp, req) => {
-			if (! resp.headers.has('Content-Type')) {
+			if (! resp.headers.has(CONTENT_TYPE)) {
 				throw new Error(`${req.method } <${req.url}> should have a Content-Type set.`);
-			} else if (resp.headers.get('Content-Type').toLowerCase().split(';')[0] !== type.toLowerCase() ) {
-				throw new Error(`${req.method } <${req.url}> should have a Content-Type of ${type}} but got ${resp.headers.get('Content-Type')}.`);
+			} else if (resp.headers.get(CONTENT_TYPE).toLowerCase().split(';')[0] !== type.toLowerCase() ) {
+				throw new Error(`${req.method } <${req.url}> should have a Content-Type of ${type}} but got ${resp.headers.get(CONTENT_TYPE)}.`);
 			}
 		};
 	}
@@ -864,10 +865,10 @@ export class RequestHandlerTest {
 	static shouldRedirect(resp, req) {
 		if (! REDIRECT_STATUSES.includes(resp.status)) {
 			throw new Error(`${req.method} <${req.url}> should have a 3xx redirect status code, but got ${resp.status}.`);
-		} else if (! resp.headers.has('Location')) {
+		} else if (! resp.headers.has(LOC)) {
 			throw new Error(`${req.method} <${req.url}> should redirect but is missing the Location HTTP header.`);
-		} else if (! URL.canParse(resp.headers.get('Location'), req.url)) {
-			throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - got ${resp.headers.get('Location')}.`);
+		} else if (! URL.canParse(resp.headers.get(LOC), req.url)) {
+			throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - got ${resp.headers.get(LOC)}.`);
 		}
 	}
 
@@ -883,18 +884,18 @@ export class RequestHandlerTest {
 	 */
 	static shouldRedirectTo(dest) {
 		return (resp, req) => {
-			const loc = URL.parse(resp.headers.get('Location'), req.url);
+			const loc = URL.parse(resp.headers.get(LOC), req.url);
 
 			if (! REDIRECT_STATUSES.includes(resp.status)) {
 				throw new Error(`${req.method} <${req.url}> should have a 3xx redirect status code, but got ${resp.status}.`);
-			} else if (! resp.headers.has('Location')) {
+			} else if (! resp.headers.has(LOC)) {
 				throw new Error(`${req.method} <${req.url}> should redirect but is missing the Location HTTP header.`);
 			} else if (! (loc instanceof URL)) {
-				throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - got ${resp.headers.get('Location')}.`);
+				throw new Error(`${req.method} <${req.url}> should redirect to a valid URL - got ${resp.headers.get(LOC)}.`);
 			} else if (typeof dest === 'string' && loc.href !== dest) {
 				throw new Error(`${req.method} <${req.url}> should redirect to ${dest} but gave ${loc}.`);
 			} else if (dest instanceof RegExp && ! dest.test(loc.href)) {
-				throw new Error(`${req.method} <${req.url}> redirected to ${resp.headers.get('Location')}, which does not match ${dest}.`);
+				throw new Error(`${req.method} <${req.url}> redirected to ${resp.headers.get(LOC)}, which does not match ${dest}.`);
 			} else if (dest instanceof URLPattern && ! dest.test(loc.href)) {
 				throw new Error(`${req.method} <${req.url}> redirected to ${loc}, which does not match the URLPattern.`);
 			} else if (
@@ -917,12 +918,12 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the Access-Control-Allow-Origin header is missing or does not allow the request's origin.
 	 */
 	static shouldAllowOrigin(resp, req) {
-		if (! resp.headers.has('Access-Control-Allow-Origin')) {
+		if (! resp.headers.has(ACAO)) {
 			throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Origin header.`);
-		} else if (req.headers.has('Origin')) {
-			const origin = req.headers.get('Origin');
+		} else if (req.headers.has(ORIGIN)) {
+			const origin = req.headers.get(ORIGIN);
 
-			if (! ['*', origin].includes(resp.headers.get('Access-Control-Allow-Origin'))) {
+			if (! ['*', origin].includes(resp.headers.get(ACAO))) {
 				throw new Error(`${req.method} <${req.url}> should allow origin: ${origin}.`);
 			}
 		}
@@ -952,10 +953,10 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the Access-Control-Allow-Origin header is missing or allows the request's origin.
 	 */
 	static async shouldDisallowOrigin(resp, req) {
-		if (resp.headers.has('Access-Control-Allow-Origin')) {
-			const origin = req.headers.get('Origin');
+		if (resp.headers.has(ACAO)) {
+			const origin = req.headers.get(ORIGIN);
 
-			if (['*', origin].includes(resp.headers.get('Access-Control-Allow-Origin'))) {
+			if (['*', origin].includes(resp.headers.get(ACAO))) {
 				throw new Error(`${req.method} <[>${req.url}> should allow not origin: ${origin}.`);
 			}
 		}
@@ -972,11 +973,11 @@ export class RequestHandlerTest {
 	 * - The `Access-Control-Allow-Origin` header is set to `"*"` while credentials are allowed.
 	 */
 	static async shouldAllowCredentials(resp, req) {
-		if (! resp.headers.has('Access-Control-Allow-Credentials')) {
+		if (! resp.headers.has(ACAC)) {
 			throw new Error(`${req.method} <[>${req.url}> is missing Access-Control-Allow-Credentials header.`);
-		} else if (! resp.headers.has('Access-Control-Allow-Origin')) {
+		} else if (! resp.headers.has(ACAO)) {
 			throw new Error(`${req.method} <[>${req.url}> is missing Access-Control-Allow-Origin header.`);
-		} else if (resp.headers.get('Access-Control-Allow-Origin') === '*') {
+		} else if (resp.headers.get(ACAO) === '*') {
 			throw new Error(`${req.method} <[>${req.url}> is Access-Control-Allow-Origin may not be "*" if credentials are allowed.`);
 		}
 	}
@@ -990,7 +991,7 @@ export class RequestHandlerTest {
 	static async shouldSupportOptionsMethod(resp, req) {
 		if (req.method !== 'OPTIONS') {
 			throw new TypeError(`${req.method} <${req.url}> is not an OPTIONS request, so this test is invalid.`);
-		} else if (! resp.headers.has('Access-Control-Allow-Methods')) {
+		} else if (! resp.headers.has(ACAM)) {
 			throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Methods in OPTIONS request.`);
 		}
 	}
@@ -1002,10 +1003,10 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the response status is 405 Method Not Allowed.
 	 */
 	static shouldAllowMethod(resp, req) {
-		if (req.method === 'OPTIONS' && req.headers.has('Access-Control-Request-Method')) {
-			const method = req.headers.get('Access-Control-Request-Method').trim().toUpperCase();
-			const allowed = resp.headers.has('Access-Control-Allow-Methods')
-				? resp.headers.get('Access-Control-Allow-Methods').split(',').map(method => method.trim().toUpperCase())
+		if (req.method === 'OPTIONS' && req.headers.has(ACRM)) {
+			const method = req.headers.get(ACRM).trim().toUpperCase();
+			const allowed = resp.headers.has(ACAM)
+				? resp.headers.get(ACAM).split(',').map(method => method.trim().toUpperCase())
 				: [];
 
 			if (! allowed.includes(method)) {
@@ -1017,17 +1018,38 @@ export class RequestHandlerTest {
 	}
 
 	/**
-	 * Checks if a response has a specified header.
+	 * Checks if a response has a list of headers.
 	 *
-	 * @param {string} name The name of the required header.
+	 * @param {...string} headers The names of the required headers.
 	 * @returns {function(Response, Request): void} A middleware function.
 	 *
-	 * @throws {Error} If the header is missing and the response status is successful.
+	 * @throws {Error} If one or more header is missing and the response status is successful.
 	 */
-	static shouldRequireHeader(name) {
+	static shouldRequireHeaders(...headers) {
 		return (resp, req) => {
-			if (resp.ok && ! req.headers.has(name)) {
-				throw new Error(`${req.method} <${req.url}> should require "${name}" header but returned a status of ${resp.status}.`);
+			const missing = headers.filter(header => ! req.headers.has(header));
+
+			if (resp.ok && missing.length !== 0) {
+				throw new Error(`${req.method} <${req.url}> should require headers: [${missing.join(', ')}] but returned a status of ${resp.status}.`);
+			}
+		};
+	}
+
+	/**
+	 * Checks if a response has specified search params.
+	 *
+	 * @param {...string} params The names of the required search params.
+	 * @returns {function(Response, Request): void} A middleware function.
+	 *
+	 * @throws {Error} If the search param is missing and the response status is successful.
+	 */
+	static shouldRequireSearchParams(...params) {
+		return (resp, req) => {
+			const searchParams = new URLSearchParams(req.url);
+			const missing = params.filter(header => ! searchParams.has(header));
+
+			if (resp.ok && missing.length !== 0) {
+				throw new Error(`${req.method} <${req.url}> should require search params: [${missing.join(', ')}] but returned a status of ${resp.status}.`);
 			}
 		};
 	}
@@ -1037,14 +1059,13 @@ export class RequestHandlerTest {
 
 	* @param {Response} resp The response object.
 	* @param {Request} req The request object.
-
 	* @throws {Error} If the header is missing and the response status is not 401.
 	* @throws {Error} If the header is present and the response status is 401.
 	*/
 	static shouldRequireAuthorization(resp, req) {
-		if (! req.headers.has('Authorization') && resp.status !== UNAUTHORIZED) {
+		if (! req.headers.has(AUTH) && resp.status !== UNAUTHORIZED) {
 			throw new Error(`${req.method} <${req.url}> should return a status of ${UNAUTHORIZED} if request is missing "Authorization" header but got ${resp.status}.`);
-		} else if (req.headers.has('Authorization') && resp.status === UNAUTHORIZED) {
+		} else if (req.headers.has(AUTH) && resp.status === UNAUTHORIZED) {
 			throw new Error(`${req.method} <${req.url}> had required "Authorization" header but still got ${UNAUTHORIZED} Unauthorized.`);
 		}
 	}
@@ -1059,10 +1080,10 @@ export class RequestHandlerTest {
 	 */
 	static shouldAllowHeaders(...headers) {
 		return (resp, req) => {
-			if (! resp.headers.has('Access-Control-Allow-Headers')) {
+			if (! resp.headers.has(ACAH)) {
 				throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Headers.`);
 			} else {
-				const allowed = getAllHeader(resp, 'Access-Control-Allow-Headers');//resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
+				const allowed = getAllHeader(resp, ACAH);//resp.headers.get(ACAH).split(',').map(header => header.trim().toLowerCase());
 				const missing = headers.filter(header => ! allowed.includes(header.toLowerCase()));
 
 				if (missing.length !== 0) {
@@ -1082,10 +1103,10 @@ export class RequestHandlerTest {
 	 */
 	static shouldNotAllowHeaders(...headers) {
 		return (resp, req) => {
-			if (! resp.headers.has('Access-Control-Allow-Headers')) {
+			if (! resp.headers.has(ACAH)) {
 				throw new Error(`${req.method} <${req.url}> missing Access-Control-Allow-Headers.`);
 			} else {
-				const allowed = resp.headers.get('Access-Control-Allow-Headers').split(',').map(header => header.trim().toLowerCase());
+				const allowed = resp.headers.get(ACAH).split(',').map(header => header.trim().toLowerCase());
 				const disallowed = headers.filter(header => allowed.includes(header.toLowerCase()));
 
 				if (headers.length !== 0) {
@@ -1104,10 +1125,10 @@ export class RequestHandlerTest {
 	 * @param {Request} req The request object.
 	 */
 	static shouldAllowRequestHeaders(resp, req) {
-		if (req.method === 'OPTIONS' && req.headers.has('Access-Control-Request-Headers')) {
-			if (resp.headers.has('Access-Control-Allow-Headers')) {
-				const reqHeaders = getAllHeader(req, 'Access-Control-Request-Headers');
-				const allowHeaders = getAllHeader(resp, 'Access-Control-Allow-Headers');
+		if (req.method === 'OPTIONS' && req.headers.has(ACRH)) {
+			if (resp.headers.has(ACAH)) {
+				const reqHeaders = getAllHeader(req, ACRH);
+				const allowHeaders = getAllHeader(resp, ACAH);
 				const disallowed = reqHeaders.filter(header => ! allowHeaders.includes(header));
 
 				if (disallowed.length !== 0) {
@@ -1127,11 +1148,11 @@ export class RequestHandlerTest {
 	 */
 	static shouldExposeHeaders(...headers) {
 		return (resp, req) => {
-			if (! resp.headers.has('Access-Control-Expose-Headers')) {
+			if (! resp.headers.has(ACEH)) {
 				throw new Error(`${req.method} <${req.url}> response missing Access-Control-Expose-Headers.`);
 			} else {
-				const exposed = getAllHeader(resp, 'Access-Control-Expose-Headers');
-				//resp.headers.get('Access-Control-Expose-Headers').split(',').map(header => header.trim().toLowerCase());
+				const exposed = getAllHeader(resp, ACEH);
+				//resp.headers.get(ACEH).split(',').map(header => header.trim().toLowerCase());
 				const missing = headers.filter(header => ! exposed.includes(header.toLowerCase()));
 
 				if (missing.length !== 0) {
@@ -1151,8 +1172,8 @@ export class RequestHandlerTest {
 	 */
 	static shouldNotExposeHeaders(...headers) {
 		return (resp, req) => {
-			if (resp.headers.has('Access-Control-Expose-Headers')) {
-				const exposed = getAllHeader(resp, 'Access-Control-Expose-Headers');
+			if (resp.headers.has(ACEH)) {
+				const exposed = getAllHeader(resp, ACEH);
 				const disallowed = headers.filter(header => exposed.includes(header.toLowerCase()));
 
 				if (disallowed.length !== 0) {
@@ -1169,10 +1190,10 @@ export class RequestHandlerTest {
 	 * @throws {Error} If the response status is not 405 Method Not Allowed.
 	 */
 	static shouldNotAllowMethod(resp, req) {
-		if (req.method === 'OPTIONS' && req.headers.has('Access-Control-Request-Method')) {
-			const method = req.headers.get('Access-Control-Request-Method').trim().toUpperCase();
-			const allowed = resp.headers.has('Access-Control-Allow-Methods')
-				? resp.headers.get('Access-Control-Allow-Methods').split(',').map(method => method.trim().toUpperCase())
+		if (req.method === 'OPTIONS' && req.headers.has(ACRM)) {
+			const method = req.headers.get(ACRM).trim().toUpperCase();
+			const allowed = resp.headers.has(ACAM)
+				? resp.headers.get(ACAM).split(',').map(method => method.trim().toUpperCase())
 				: [];
 
 			if (allowed.includes(method)) {
@@ -1180,9 +1201,9 @@ export class RequestHandlerTest {
 			}
 		} else if (resp.status !== METHOD_NOT_ALLOWED) {
 			throw new Error(`${req.method} <${req.url}> should not support HTTP method "${req.method}. Got status [${resp.status}]."`);
-		} else if (! resp.headers.has('Allow')) {
+		} else if (! resp.headers.has(ALLOW)) {
 			throw new Error(`${req.method} <${req.url}> not allowed, but is missing Allow header.`);
-		} else if (resp.headers.get('Allow').split(',').map(method => method.trim().toUpperCase()).includes(req.method)) {
+		} else if (resp.headers.get(ALLOW).split(',').map(method => method.trim().toUpperCase()).includes(req.method)) {
 			throw new Error(`${req.method} <${req.url}> not allowed, but is listed as an allowed method.`);
 		}
 	}
@@ -1196,7 +1217,7 @@ export class RequestHandlerTest {
 	 * @param {Request} req The request object.
 	 */
 	static shouldBeCorsResponse(resp, req) {
-		if (! resp.headers.has('Access-Control-Allow-Origin')) {
+		if (! resp.headers.has(ACAO)) {
 			throw new Error(`${req.method} <${req.url}> is missing required Access-Control-Allow-Origin header.`);
 		}
 	}
@@ -1214,14 +1235,14 @@ export class RequestHandlerTest {
 		if (resp.status !== UNAUTHORIZED && req.credentials === 'omit') {
 			throw new Error(`${req.method} <${req.url}> should require credentials.`);
 		} else if (req.mode === 'cors') {
-			if (resp.headers.get('Access-Control-Allow-Credentials') !== 'true') {
+			if (resp.headers.get(ACAC) !== 'true') {
 				throw new Error(`${resp.method} <${resp.url}> missing required Access-Control-Allow-Credentials header.`);
-			} else if (! resp.headers.has('Access-Control-Allow-Origin')) {
-				throw new Error(`${resp.method} <${resp.url}> missing required Access-Control-Allow-Origin header.`);
-			} else if (! URL.canParse(req.headers.get('Access-Control-Allow-Origin'))) {
-				throw new Error(`${resp.method} <${resp.url}> invalid Access-Control-Allow-Origin header: ${resp.headers.get('Access-Control-Allow-Origin')}.`);
-			} else if (req.headers.get('Origin') !== resp.headers.get('Access-Control-Allow-Origin')) {
-				throw new Error(`${req.method} <${req.url}> origin mismatch. Request from ${req.headers.get('origin')} but allows ${resp.headers.get('Access-Control-Allow-Origin')}`);
+			} else if (! resp.headers.has(ACAO)) {
+				throw new Error(`${req.method} <${req.url}> missing required Access-Control-Allow-Origin header.`);
+			} else if (! URL.canParse(resp.headers.get(ACAO))) {
+				throw new Error(`${req.method} <${req.url}> invalid Access-Control-Allow-Origin header: ${resp.headers.get(ACAO)}.`);
+			} else if (req.headers.get(ORIGIN) !== resp.headers.get(ACAO)) {
+				throw new Error(`${req.method} <${req.url}> origin mismatch. Request from ${req.headers.get(ORIGIN)} but allows ${resp.headers.get(ACAO)}`);
 			}
 		}
 	}
@@ -1251,28 +1272,28 @@ export class RequestHandlerTest {
 	static shouldPassPreflight(resp, req) {
 		if (req.method !== 'OPTIONS') {
 			throw new TypeError(`${req.method} <${req.url}> preflight tests only apply to OPTIONS requests.`);
-		} else if (req.mode !== 'cors' || ! req.headers.has('Origin')) {
+		} else if (req.mode !== 'cors' || ! req.headers.has(ORIGIN)) {
 			throw new Error(`${req.method} <${req.url}> is not a valid CORS request.`);
-		} else if (! URL.parse(req.headers.get('Origin'))?.origin === req.headers.get('Origin')) {
-			throw new Error(`${req.method} <${req.url}> has an invalid Origin of "${req.headers.get('Origin')}".`);
-		} else if (! req.headers.has('Access-Control-Request-Method')) {
+		} else if (! URL.parse(req.headers.get(ORIGIN))?.origin === req.headers.get(ORIGIN)) {
+			throw new Error(`${req.method} <${req.url}> has an invalid Origin of "${req.headers.get(ORIGIN)}".`);
+		} else if (! req.headers.has(ACRM)) {
 			throw new Error(`${req.method} <${req.url}> is missing required Access-Control-Request-Method header.`);
 		} else if (! (resp.status === OK || resp.status === NO_CONTENT)) {
 			throw new Error(`${req.method} <${req.url}> expected a 2xx status but got ${resp.status}.`);
-		} else if (! getAllHeader(resp, 'Access-Control-Allow-Methods').includes(req.headers.get('Access-Control-Request-Method').toLowerCase())) {
-			throw new Error(`${req.method} <${req.url}> expected to allow ${req.headers.get('Access-Control-Request-Method')} but does not.`);
+		} else if (! getAllHeader(resp, ACAM).includes(req.headers.get(ACRM).toLowerCase())) {
+			throw new Error(`${req.method} <${req.url}> expected to allow ${req.headers.get(ACRM)} but does not.`);
 		} else if (resp.body instanceof ReadableStream) {
 			throw new Error(`${resp.method} <${resp.url}> - Options response must not have a body.`);
 		} else if (
 			req.credentials === 'include'
-			&& (! resp.headers.has('Access-Control-Allow-Origin') || resp.headers.get('Access-Control-Allow-origin') !== req.headers.get('Origin'))
+			&& (! resp.headers.has(ACAO) || resp.headers.get(ACAO) !== req.headers.get(ORIGIN))
 		) {
 			throw new Error(`${req.method} <${req.url}> has misconfigured CORS headers for a credentialed request.`);
 		} else {
-			const reqHeaders = getAllHeader(req, 'Access-Control-Request-Headers');
+			const reqHeaders = getAllHeader(req, ACRH);
 
 			if (reqHeaders.length !== 0) {
-				const allowed = getAllHeader(resp, 'Access-Control-Allow-Headers');
+				const allowed = getAllHeader(resp, ACAH);
 				const missing = reqHeaders.filter(header => ! allowed.includes(header));
 
 				if (missing.length !== 0) {
@@ -1326,8 +1347,8 @@ export class RequestHandlerTest {
 	 * @param {Response} resp - The response object whose body are to be logged.
 	 */
 	static async logResponseBody(resp) {
-		if (resp.headers.has('Content-Type')) {
-			switch(resp.headers.get('Content-Type').toLowerCase()) {
+		if (resp.headers.has(CONTENT_TYPE)) {
+			switch(resp.headers.get(CONTENT_TYPE).toLowerCase()) {
 				case '':
 					 console.log(null);
 					 break;
@@ -1348,7 +1369,7 @@ export class RequestHandlerTest {
 					break;
 
 				default:
-					console.log(resp.clone().headers.get('Content-Type').endsWith('+json') ? await resp.clone().json() : await resp.clone().blob());
+					console.log(resp.clone().headers.get(CONTENT_TYPE).endsWith('+json') ? await resp.clone().json() : await resp.clone().blob());
 			}
 		}
 	}
