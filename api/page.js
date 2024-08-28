@@ -13,7 +13,7 @@ export default createHandler({
 		const theme = new Cookie({
 			name: 'theme',
 			value: req.cookies.get('theme') ?? 'dark',
-			expires: performance.now() + 3_600_000,
+			expires: Date.now() + 3_600_000,
 			path: url,
 			domain: url,
 			sameSite: 'lax',
@@ -24,7 +24,7 @@ export default createHandler({
 		const uid = new Cookie({
 			name: 'uid',
 			value: req.cookies.get('uid') ?? crypto.randomUUID(),
-			expires: performance.now() + 3_600_000,
+			expires: Date.now() + 3_600_000,
 			path: url,
 			domain: url,
 			sameSite: 'lax',
