@@ -1,9 +1,6 @@
 
-const DESTINATIONS = [
-	'', 'audio', 'audioworklet', 'document', 'embed', 'fencedframe', 'font', 'frame', 'iframe', 'image',
-	'json', 'manifest', 'object', 'paintworklet', 'report', 'script', 'sharedworker', 'style', 'track',
-	'video', 'worker', 'xslt',
-];
+import { JSON as JSON_MIME } from '@shgysk8zer0/consts/mimes.js';
+import { CONTENT_LENGTH, CONTENT_TYPE, AUTH, REFERRER, DESTINATIONS } from './consts.js';
 
 export class TestRequest extends Request {
 	#destination = '';
@@ -22,15 +19,15 @@ export class TestRequest extends Request {
 			this.headers.set('Sec-Fetch-Dest', destination.length === 0 ? 'empty' : destination);
 		}
 
-		if (! this.headers.has('Content-Length') && this.body instanceof ReadableStream) {
+		if (! this.headers.has(CONTENT_LENGTH) && this.body instanceof ReadableStream) {
 			if (typeof config.body === 'string') {
-				this.headers.set('Content-Length', config.body.length);
+				this.headers.set(CONTENT_LENGTH, config.body.length);
 			} else if (config.body instanceof Blob) {
-				this.headers.set('Content-Length', config.body.size);
+				this.headers.set(CONTENT_LENGTH, config.body.size);
 			} else if (config.body instanceof ArrayBuffer) {
-				this.headers.set('Content-Length', new Uint8Array(config.body).byteLength);
+				this.headers.set(CONTENT_LENGTH, new Uint8Array(config.body).byteLength);
 			} else if (config.body instanceof FormData) {
-				const boundary = this.headers.get('Content-Type').substring(30);
+				const boundary = this.headers.get(CONTENT_TYPE).substring(30);
 				const entries = [...config.body.entries()];
 				const boundaryLength = boundary.length + 2;
 
@@ -48,24 +45,24 @@ export class TestRequest extends Request {
 					}
 				}
 
-				this.headers.set('Content-Length', length);
+				this.headers.set(CONTENT_LENGTH, length);
 			} else if (config.body instanceof URLSearchParams) {
-				this.headers.set('Content-Length', config.body.toString().length);
+				this.headers.set(CONTENT_LENGTH, config.body.toString().length);
 			} else if (config.body instanceof Uint8Array) {
-				this.headers.set('Content-Length', config.body.byteLength);
+				this.headers.set(CONTENT_LENGTH, config.body.byteLength);
 			}
 		}
 
 		if (typeof token === 'string') {
-			this.headers.set('Authorization', `Bearer ${token}`);
+			this.headers.set(AUTH, `Bearer ${token}`);
 		}
 
 		if (! this.headers.has('Sec-Fetch-Mode')) {
 			this.headers.set('Sec-Fetch-Mode', this.mode);
 		}
 
-		if (! this.headers.has('Referer')) {
-			this.headers.set('Referer', this.referrer);
+		if (! this.headers.has(REFERRER)) {
+			this.headers.set(REFERRER, this.referrer);
 		}
 	}
 
@@ -78,18 +75,18 @@ export class TestRequest extends Request {
 	}
 
 	static json(data, url, { method = 'POST', headers = new Headers(), ...config } = {}) {
-		const body = new Blob([JSON.stringify(data)], { type: 'application/json' });
+		const body = new Blob([JSON.stringify(data)], { type: JSON_MIME });
 
 		if (! (headers instanceof Headers)) {
 			headers = new Headers(headers);
 		}
 
-		if (! headers.has('Content-Length')) {
-			headers.set('Content-Length', body.size);
+		if (! headers.has(CONTENT_LENGTH)) {
+			headers.set(CONTENT_LENGTH, body.size);
 		}
 
-		if (! headers.has('Content-Type')) {
-			headers.set('Content-Type', body.type);
+		if (! headers.has(CONTENT_TYPE)) {
+			headers.set(CONTENT_TYPE, body.type);
 		}
 
 		return new TestRequest(url, { method, headers, ...config, body });

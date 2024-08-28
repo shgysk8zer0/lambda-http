@@ -31,6 +31,7 @@ const referrer = origin;
 
 const headers = {
 	'Origin': origin,
+	'X-Foo': 'bar',
 };
 
 const signal = AbortSignal.timeout(500);
@@ -43,6 +44,7 @@ const { error } = await RequestHandlerTest.runTests(
 			RequestHandlerTest.shouldBeOk,
 			RequestHandlerTest.shouldHaveBody,
 			RequestHandlerTest.shouldBeJSONObject,
+			RequestHandlerTest.shouldRequireHeaders('X-Foo'),
 			RequestHandlerTest.shouldSetCookies('foo'),
 			RequestHandlerTest.shouldNotSetCookies('bar'),
 		]
@@ -63,8 +65,12 @@ const { error } = await RequestHandlerTest.runTests(
 		RequestHandlerTest.shouldBeOk
 	),
 	new RequestHandlerTest(
-		new TestRequest(url, { referrer, signal, searchParams: { test: 'json-keys' }}),
+		new TestRequest(url, { referrer, headers, signal, searchParams: { test: 'json-keys' }}),
 		[RequestHandlerTest.shouldHaveJSONKeys('url', 'headers')]
+	),
+	new RequestHandlerTest(
+		new TestRequest(url, { referrer, signal, searchParams: { test: 'missing-x-foo' }}),
+		[RequestHandlerTest.shouldClientError]
 	),
 	new RequestHandlerTest(
 		new TestRequest(url, {

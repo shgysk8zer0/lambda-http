@@ -7,11 +7,10 @@ export default createHandler({
 			mode: req.mode,
 			destination: req.destination,
 			headers: Object.fromEntries(req.headers),
-			pattern: 'URLPattern' in globalThis,
 		});
 	}
 }, {
 	allowCredentials: true,
 	allowHeaders: ['Authorization'],
-	allowOrigins: ['*'],
+	allowOrigins: new URLPattern({ hostname: 'localhost', port: ':port(8888|9999)' }),
 });

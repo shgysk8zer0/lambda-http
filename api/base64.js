@@ -12,4 +12,4 @@ async function base64Encode(req) {
 export default createHandler({
 	put: base64Encode,
 	post: base64Encode,
-}, { logger: err => console.error(err) });
+}, { logger: err => console.error(err), requireHeaders: ['Content-Type'] });

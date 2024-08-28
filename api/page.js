@@ -4,7 +4,8 @@ import { Cookie } from '../cookies.js';
 
 export default createHandler({
 	async get(req) {
-		const headers = new Headers();
+		const start = performance.now();
+		const headers = new Headers({ 'Content-Type': 'text/html' });
 		const now = new Date();
 		const nonce = crypto.randomUUID();
 		const url = URL.parse('./', req.url);
@@ -37,7 +38,8 @@ export default createHandler({
 		headers.append('Link', `<${new URL('./script', req.url)}>; rel="preload"; as="script"; referrerpolicy="no-referrer"`);
 		headers.append('Link', `<${new URL('./polyfills', req.url)}>; rel="preload"; crossorigin="anonymous"; as="script"; referrerpolicy="no-referrer"`);
 		headers.append('Link', `<${new URL('./svg', req.url)}>; rel="preload"; as="image"; referrerpolicy="no-referrer"`);
-
+		const headerTime = performance.now();
+		headers.append('Server-Timing', `headers;dur=${headerTime - start}`);
 		const request = JSON.stringify({
 			url: req.url,
 			mode: req.mode,
@@ -48,10 +50,12 @@ export default createHandler({
 			credentials: req.credentials,
 			headers: Object.fromEntries(req.headers),
 		}, null, 4);
+		const jsonTime = performance.now();
+		headers.append('Server-Timing', `json;dur=${jsonTime - headerTime}`);
 
 		const doc = await DocumentTemplate.load('./index.html');
 
-		return doc.setUnsafe('request', request)
+		doc.setUnsafe('request', request)
 			.setAllSafe({
 				title: 'Test Page',
 				message: '<span onclick="alert(1)">Hello, World!</span>',
@@ -62,7 +66,10 @@ export default createHandler({
 				theme: decodeURIComponent(req.cookies.get('theme') ?? 'light dark'),
 			})
 			.setSafe('json', JSON.stringify(doc, null, 4)).response({ headers });
+
+		headers.append('Server-Timing', `doc;dur=${performance.now() - jsonTime}`);
+		headers.append('Server-Timing', `total;dur=${performance.now() - start}`);
+
+		return new Response(doc, { headers });
 	}
-}, {
-	logger: err => console.error(err),
 });
