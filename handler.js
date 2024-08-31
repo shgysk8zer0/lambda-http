@@ -7,6 +7,7 @@ import { METHOD_NOT_ALLOWED, NO_CONTENT } from '@shgysk8zer0/consts/status.js';
 import { contextFallback } from './context.js';
 import { NetlifyRequest } from './NetlifyRequest.js';
 import { ACAO, ACAC, ACAM, ACAH, ACRH, ACEH, AUTH, ORIGIN, ALLOW, CONTENT_LENGTH } from './consts.js';
+import { decodeRequestToken } from '@shgysk8zer0/jwk-utils/jwt.js';
 
 const NO_BODY_METHODS = ['HEAD', 'GET', 'OPTIONS', 'DELETE'];
 
@@ -111,26 +112,40 @@ export function isAllowedOrigin(req, allowOrigins) {
  * @function createHandler
  * @param {Object.<string, function(Request, *): (Response|Promise<Response>)>} handlers - A map of HTTP methods (lowercase) to their corresponding handler functions.
  * @param {Object} [options] - Optional configuration settings.
- * @param {string|string[]|Set<string>|URLPattern} [options.allowOrigins] - Allowed origins. Can be a string, array of strings, or a Set of strings. Defaults to allowing all origins.
  * @param {string|string[]} [options.allowHeaders] - Allowed headers. Can be a string or an array of strings.
- * @param {boolean} [options.allowCredentials=false] - Whether to allow credentials (cookies, authorization headers, etc.).
  * @param {string|string[]} [options.exposeHeaders] - Headers to expose to the client. Can be a string or an array of strings.
- * @param {number} [options.maxContentLength] - Maximum size allowed via Content-Length headers.
+ * @param {string|string[]|Set<string>|URLPattern} [options.allowOrigins] - Allowed origins. Can be a string, array of strings, or a Set of strings. Defaults to allowing all origins.
+ * @param {boolean} [options.allowCredentials=false] - Whether to allow credentials (cookies, authorization headers, etc.).
+ * @param {boolean} [options.requireCORS=false] - If set, a valid Origin header will be required.
+ * @param {boolean} [options.requireSameOrigin=false] - If set, requires a same-origin request, determined by the referrer vs origin of the request URL.
+ * @param {boolean} [options.requireContentLength=false] - If set and Content-Length header is not set, throws a HTTPLengthRequiredError.
+ * @param {number} [options.maxContentLength=NaN] - Maximum size allowed via Content-Length headers. If exceeded, throws a HTTPPayloadTooLargeError
+ * @param {boolean} [options.requireCredentials=false] - If set, requires `request.credentials === 'include'.
+ * @param {boolean} [options.requireJWT=false] - If set, requires an "Authorization Bearer :token" header. Throws HTTPUnauthorized if missing or invalid.
+ * @param {string[]} [options.requireHeaders] - A list of headers the request must have. Throws HTTPBadRequestError if any are missing.
+ * @param {string[]} [options.requireSearchParams] - A list of search params the request must have. Throws HTTPBadRequestError if any are missing.
  * @param {function(Error, Request)} [options.logger] - A function to log errors. It receives the error object and the request as arguments.
- * @returns {function(Request, *): Promise<Response>} An async request handler function.
+ * @returns {function(Request, object): Promise<Response>} An async request handler function.
  *
  * @throws {TypeError} If the first argument is not a Request object.
+ * @throws {HTTPUnauthorizedError} If missing required Authorization header or cookies.
+ * @throws {HTTPBadRequestError} If required search params or headers are missing.
+ * @throws {HTTPLengthRequiredError} If `requireContentLength` is true and not Content-Length header is present
+ * @throws {HTTPPayloadTooLargeError} If `maxContentLength` is a positive number and Content-Length header exceeds that.
+ * @throws {HTTPMethodNotAllowedError} If request method (lower-cased) is not found in the keys of `handlers`. Note that OPTIONS is automatically added if missing.
+ * @throws {HTTPInternalServerError} If the handler throw an error other than an HTTPError, or if the response was not a Response object.
  */
 export function createHandler(handlers, {
 	allowHeaders,
+	exposeHeaders,
 	allowOrigins,
 	allowCredentials = false,
-	exposeHeaders,
 	requireCORS = false,
 	requireSameOrigin = false,
+	requireContentLength = false,
 	maxContentLength = NaN,
 	requireCredentials = false,
-	requireContentLength = false,
+	requireJWT = false,
 	requireHeaders,
 	requireSearchParams,
 	logger,
@@ -159,7 +174,7 @@ export function createHandler(handlers, {
 		allowHeaders = [...new Set([...allowHeaders, ...requireHeaders])];
 	}
 
-	if (requireCredentials && ! allowHeaders.includes(AUTH)) {
+	if ((requireCredentials || requireJWT) && ! (Array.isArray(allowHeaders) && allowHeaders.includes(AUTH))) {
 		allowHeaders = Array.isArray(allowHeaders) ?  [...allowHeaders, AUTH] : [AUTH];
 	}
 
@@ -171,24 +186,22 @@ export function createHandler(handlers, {
 			throw new HTTPMethodNotAllowedError(`Unsupported request method: ${orig.method}`, {
 				headers: { Allow: methods.join(', ').toUpperCase() },
 			});
-		} else if (requireCredentials) {
-			if (! Array.isArray(allowHeaders)) {
-				allowHeaders = [AUTH];
-			} else  if (Array.isArray(allowHeaders) && ! allowHeaders.includes(AUTH)) {
-				allowHeaders.push(AUTH);
-			}
 		}
 
-		if (
+		if (requireJWT && ! orig.headers.has(AUTH)) {
+			throw new HTTPUnauthorizedError(`Access requires a JWT via ${AUTH} header.`);
+		} else if (
 			missingHeaders.length !== 0
 			&& orig.method !== 'OPTIONS'
 			&& orig.method !== 'HEAD'
 		) {
-			if (missingHeaders.includes('Authorization')) {
+			if (missingHeaders.includes(AUTH)) {
 				throw new HTTPUnauthorizedError('Missing required Authorization header.');
 			} else {
 				throw new HTTPBadRequestError('Request is missing required headers', { details: { requireHeaders } });
 			}
+		} else if (requireJWT && decodeRequestToken(orig) === null) {
+			throw new HTTPUnauthorizedError('Authorization was given, but is invalid.');
 		} else if (
 			! Number.isNaN(maxContentLength)
 			&& orig.headers.has(CONTENT_LENGTH)

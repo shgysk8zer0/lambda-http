@@ -8,6 +8,8 @@ const { error, duration } = await RequestHandlerTest.loadAndRunTests(
 	import.meta.resolve('./echo.js'),
 	import.meta.resolve('./error.js'),
 	import.meta.resolve('./hash.js'),
+	import.meta.resolve('./jwt.js'),
+	import.meta.resolve('./jwtgen.js'),
 	import.meta.resolve('./page.js'),
 	import.meta.resolve('./polyfills.js'),
 	import.meta.resolve('./redirect.js'),

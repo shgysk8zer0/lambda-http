@@ -12,7 +12,7 @@ const ROOT = 'process' in globalThis && process.cwd instanceof Function ? `file:
 export function getFileURL(src, base = ROOT) {
 	if (src instanceof URL) {
 		return URL.parse(src.pathname, base);
-	} else if (typeof src==='string' && URL.canParse(src) && ! src.startsWith('file:')) {
+	} else if (typeof src === 'string' && URL.canParse(src) && ! src.startsWith('file:')) {
 		return getFileURL('.' + new URL(src).pathname, base);
 	} else {
 		return URL.parse(src, base);
