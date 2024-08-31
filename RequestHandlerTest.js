@@ -6,6 +6,7 @@ import { HTML, JSON as JSON_MIME, JSON_LD, FORM_MULTIPART, FORM_URL_ENCODED, TEX
 import { loadModuleHandler, getFileURL } from './utils.js';
 import { HTTPError } from './error.js';
 import { ACAO, ACAC, ACAM, ACAH, ACRM, ACRH, ACEH, LOC, AUTH, CONTENT_TYPE, ORIGIN, ACCEPT, ALLOW } from './consts.js';
+import { decodeRequestToken } from '@shgysk8zer0/jwk-utils/jwt.js';
 
 const between = (min, val, max) => ! (val < min || max > max);
 
@@ -1219,6 +1220,29 @@ export class RequestHandlerTest {
 	static shouldBeCorsResponse(resp, req) {
 		if (! resp.headers.has(ACAO)) {
 			throw new Error(`${req.method} <${req.url}> is missing required Access-Control-Allow-Origin header.`);
+		}
+	}
+
+	/**
+	 * Validates if a request should require a JWT token based on the response and request headers.
+	 *
+	 * @param {Response} resp - The HTTP response object.
+	 * @param {Request} req - The HTTP request object.
+	 * @throws {Error} - If the request requires a JWT but is missing the Authorization header, or if the request has an Authorization header but the response is unauthorized.
+	 * @throws {Error} - If the request has a valid Authorization header but the decoded token is invalid.
+	 */
+	static shouldRequireJWT(resp, req) {
+		if (resp.ok && ! req.headers.has(AUTH)) {
+			throw new Error(`${req.method} <${req.url}> should require ${AUTH} header.`);
+		} else if (req.headers.has(AUTH) && resp.status === UNAUTHORIZED) {
+			throw new Error(`${req.method} <${req.url}> should has ${AUTH} header but was unauthorized.`);
+		} else {
+			const { header, payload, signature, data } = decodeRequestToken(req) ?? {};
+			const valid = typeof header === 'object' && typeof payload === 'object' && signature instanceof Uint8Array && data instanceof Uint8Array;
+
+			if (! valid && resp.ok) {
+				throw new Error(`${req.method} <${req.url}> allowed an invalid JWT.`);
+			}
 		}
 	}
 

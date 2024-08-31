@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.2] - 2024-08-31
+
+### Added
+- Added support for JWT via `@shgysk8zer0/jwk-utils`
+- Added tests for valid JWTs via Authorization Bearer
+- Add `requireJWT` option to `createHandler`
+- Add missing documentation to `createHandler`
+
 ## [v1.1.3] - 2024-08-28
 
 ### Added
