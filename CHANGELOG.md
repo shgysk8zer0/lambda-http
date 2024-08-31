@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [v1.1.2] - 2024-08-31
+## [v1.1.4] - 2024-08-31
 
 ### Added
 - Added support for JWT via `@shgysk8zer0/jwk-utils`
