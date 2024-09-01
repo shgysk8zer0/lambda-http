@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.7] - 2024-09-01
+
+### Changed
+- Update `@shgysk8zer0/jwk-utils` to fix false deprecation
+
 ## [v1.1.6] - 2024-09-01
 
 ### Changed
