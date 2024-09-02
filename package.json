@@ -1,6 +1,6 @@
 {
   "name": "@shgysk8zer0/lambda-http",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "A collection of node >= 20 utilities for Netlify Functions and AWS Lambda",
   "keywords": [
     "request",
@@ -88,7 +88,7 @@
   },
   "dependencies": {
     "@shgysk8zer0/consts": "^1.0.8",
-    "@shgysk8zer0/jwk-utils": "^1.0.5",
+    "@shgysk8zer0/jwk-utils": "^1.0.6",
     "@shgysk8zer0/polyfills": "^0.4.1"
   }
 }
