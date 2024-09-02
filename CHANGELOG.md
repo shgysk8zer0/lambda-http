@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.8] - 2024-09-02
+
+### Added
+- Add test for exporting public JWK as file
+
+### Changed
+- Update `@shgysk8zer0/jwk-utils` for easier key management
+
 ## [v1.1.7] - 2024-09-01
 
 ### Changed
