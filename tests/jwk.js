@@ -10,7 +10,9 @@ const { error } = await RequestHandlerTest.runTests(
 			const data = await resp.json();
 			const key = await importJWK(data);
 
-			if (! (key instanceof CryptoKey)) {
+			if (key instanceof Error) {
+				throw key;
+			} else if (! (key instanceof CryptoKey)) {
 				throw new TypeError('Key should be a CryptoKey.');
 			} else if (key.type !== 'public') {
 				throw new TypeError(`Key should be a public key, but got ${key.type}.`);

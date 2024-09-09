@@ -6,7 +6,7 @@ import { HTML, JSON as JSON_MIME, JSON_LD, FORM_MULTIPART, FORM_URL_ENCODED, TEX
 import { loadModuleHandler, getFileURL } from './utils.js';
 import { HTTPError } from './error.js';
 import { ACAO, ACAC, ACAM, ACAH, ACRM, ACRH, ACEH, LOC, AUTH, CONTENT_TYPE, ORIGIN, ACCEPT, ALLOW } from './consts.js';
-import { decodeRequestToken } from '@shgysk8zer0/jwk-utils/jwt.js';
+import { decodeRequestToken, verifyHeader, verifyPayload } from '@shgysk8zer0/jwk-utils/jwt.js';
 
 const between = (min, val, max) => ! (val < min || max > max);
 
@@ -1237,11 +1237,22 @@ export class RequestHandlerTest {
 		} else if (req.headers.has(AUTH) && resp.status === UNAUTHORIZED) {
 			throw new Error(`${req.method} <${req.url}> should has ${AUTH} header but was unauthorized.`);
 		} else {
-			const { header, payload, signature, data } = decodeRequestToken(req) ?? {};
-			const valid = typeof header === 'object' && typeof payload === 'object' && signature instanceof Uint8Array && data instanceof Uint8Array;
+			const result = decodeRequestToken(req);
 
-			if (! valid && resp.ok) {
-				throw new Error(`${req.method} <${req.url}> allowed an invalid JWT.`);
+			if (resp.ok && result instanceof Error) {
+				throw result;
+			} else if (resp.ok && result === null) {
+				throw new Error('Error decoding request JWT.');
+			} else {
+				const valid = verifyHeader(result?.header)
+					&& verifyPayload(result?.payload)
+					&& result?.signature instanceof Uint8Array
+					&& result?.data instanceof Uint8Array
+					&& result?.signature.length !== 0;
+
+				if (! valid && resp.ok) {
+					throw new Error(`${req.method} <${req.url}> allowed an invalid JWT.`);
+				}
 			}
 		}
 	}

@@ -10,9 +10,10 @@ const { error } = await RequestHandlerTest.runTests(
 		async resp => {
 			const { token } = await resp.json();
 			const publicKey = await importJWK(PUBLIC_KEY);
+			const decoded = await verifyJWT(token, publicKey);
 
-			if (! await verifyJWT(token, publicKey)) {
-				throw new Error('Failed to decode or verify the token.');
+			if (decoded instanceof Error) {
+				throw decoded;
 			}
 		}
 	)
