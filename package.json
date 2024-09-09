@@ -51,7 +51,7 @@
     "build": "npm run build:js",
     "build:js": "npm run clean && rollup -c rollup.config.js",
     "clean": "rm -f ./*.cjs",
-    "run:tests": "node ./tests/all.js",
+    "run:tests": "node --test",
     "create:lock": "npm i --package-lock-only --ignore-scripts --no-audit --no-fund",
     "version:bump": "npm run version:bump:patch",
     "version:bump:patch": "npm version --no-git-tag-version patch && npm run create:lock",

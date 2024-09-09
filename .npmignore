@@ -1,5 +1,6 @@
 node_modules/
 .netlify/
+*.test.js
 api/
 tests/
 netlify.toml
