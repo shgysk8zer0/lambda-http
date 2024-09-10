@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## Changed
+## [v1.1.10] - 2024-09-10
+
+### Changed
 - Switch to using `node --test` for tests
 - Another update to `@shgysk8zer0/jwk-utils`
 
