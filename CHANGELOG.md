@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.13] - 2024-09-12
+
+### Fixed
+- Update `@shgysk8zer0/jwk-utils` with fixes to JSDocs
+
 ## [v1.1.12] - 2024-09-12
 
 ### Changed
