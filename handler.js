@@ -10,6 +10,7 @@ import { ACAO, ACAC, ACAM, ACAH, ACRH, ACEH, AUTH, ORIGIN, ALLOW, CONTENT_LENGTH
 import { decodeRequestToken } from '@shgysk8zer0/jwk-utils/jwt.js';
 
 const NO_BODY_METHODS = ['HEAD', 'GET', 'OPTIONS', 'DELETE'];
+const REDIRECT_CODES = [301, 302, 303, 307, 308];
 
 export function createOptionsHandler(methods) {
 	return async function() {
@@ -24,6 +25,10 @@ export function createOptionsHandler(methods) {
 	};
 }
 
+function isRedirect(resp) {
+	return resp.headers.has('Location') && REDIRECT_CODES.includes(resp.status);
+}
+
 function addCorsHeaders(resp, req, {
 	allowHeaders,
 	allowOrigins,
@@ -32,7 +37,8 @@ function addCorsHeaders(resp, req, {
 	methods,
 } = {}) {
 	try {
-		if (req instanceof Request && req.headers.has(ORIGIN)) {
+		// `Response.redirect` and `Response.error` have immutable headers
+		if (req instanceof Request && req.headers.has(ORIGIN) && ! (resp.status === 0 || isRedirect(resp))) {
 			const origin = URL.parse(req.headers.get(ORIGIN))?.origin;
 
 			if (allowCredentials && ! resp.headers.has(ACAC)) {
@@ -77,10 +83,16 @@ function addCorsHeaders(resp, req, {
 	return resp;
 }
 
+function getOrigin(req) {
+	if (req.headers.has('Origin')) {
+		return URL.parse(req.headers.get('Origin'))?.origin;
+	} else {
+		return URL.parse(req.referrer)?.origin;
+	}
+}
+
 export function isAllowedOrigin(req, allowOrigins) {
-	const origin = req.headers.has(ORIGIN)
-		? URL.parse(req.headers.get(ORIGIN))?.origin ?? null
-		: null;
+	const origin = getOrigin(req);
 
 	switch(typeof allowOrigins) {
 		case 'undefined':
@@ -92,14 +104,12 @@ export function isAllowedOrigin(req, allowOrigins) {
 		case 'object':
 			if (allowOrigins instanceof RegExp || allowOrigins instanceof URLPattern) {
 				return allowOrigins.test(origin);
-			} else {
-				return Array.isArray(allowOrigins)
-					&& typeof origin === 'string'
-					&& (
-						(allowOrigins.includes('*') || allowOrigins.includes(origin))
-					) || (allowOrigins instanceof Set
-							&& (allowOrigins instanceof Set && allowOrigins.has('*') || allowOrigins.has(origin)));
+			} else if (allowOrigins instanceof Set) {
+				return allowOrigins.includes('*') || allowOrigins.includes(origin);
+			} else if (Array.isArray) {
+				return allowOrigins.includes('*') || allowOrigins.includes(origin);
 			}
+			break;
 
 		default:
 			return false;
@@ -236,9 +246,8 @@ export function createHandler(handlers, {
 		} else if (requireSameOrigin && ! req.isSameOrigin) {
 			throw new HTTPForbiddenError('Must be a same-origin request.');
 		} else if (
-			requireCORS
+			typeof allowOrigins !== 'undefined'
 			&& ! req.isSameOrigin
-			&& Array.isArray(allowOrigins) && allowOrigins.length !== 0
 			&& ! isAllowedOrigin(req, allowOrigins)
 		) {
 			throw new HTTPForbiddenError(`Disallowed Origin: ${req.headers.get(ORIGIN)}.`);

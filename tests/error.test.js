@@ -14,7 +14,7 @@ const { error } = await RequestHandlerTest.runTests(
 		[RequestHandlerTest.shouldNotAllowMethod]
 	),
 	new RequestHandlerTest(
-		new TestRequest(url, { headers: { Accept: 'text/plain' }}),
+		new TestRequest(url, { headers: { Accept: 'text/plain', Origin: 'http://localhost:9999' }}),
 		[RequestHandlerTest.shouldNotAccept]
 	),
 	new RequestHandlerTest(
