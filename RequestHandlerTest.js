@@ -573,7 +573,7 @@ export class RequestHandlerTest {
 	 */
 	static shouldNotAccept(resp, req) {
 		if (req.headers.has(ACCEPT) && resp.status !== NOT_ACCEPTABLE) {
-			throw new Error(`${req.method } <${req.url}> should not accept ${req.headers.get(ACCEPT)}.`);
+			throw new Error(`${req.method } <${req.url}> should not accept ${req.headers.get(ACCEPT)}. Got status of ${resp.status}.`);
 		}
 	}
 

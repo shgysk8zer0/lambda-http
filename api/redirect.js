@@ -6,5 +6,4 @@ export default createHandler({
 	}
 }, {
 	allowOrigins: ['http://localhost:9999', 'http://localhost:8888'],
-	logger: console.error
 });
