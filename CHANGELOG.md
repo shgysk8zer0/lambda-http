@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.16] - 2024-09-15
+
+### Fixed
+- Revert back to using `.js` for modules
+
 ## [v1.1.15] - 2024-09-15
 
 ### Fixed
