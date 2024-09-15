@@ -1,6 +1,6 @@
 {
   "name": "@shgysk8zer0/lambda-http",
-  "version": "1.1.15",
+  "version": "1.1.16",
   "description": "A collection of node >= 20 utilities for Netlify Functions and AWS Lambda",
   "keywords": [
     "request",
@@ -12,11 +12,11 @@
   ],
   "type": "module",
   "main": "./lambda-http.cjs",
-  "module": "./lambda-http.mjs",
-  "unpkg": "./lambda-http.mjs",
+  "module": "./lambda-http.js",
+  "unpkg": "./lambda-http.js",
   "exports": {
     ".": {
-      "import": "./lambda-http.mjs",
+      "import": "./lambda-http.js",
       "require": "./lambda-http.cjs"
     },
     "./*.js": {
