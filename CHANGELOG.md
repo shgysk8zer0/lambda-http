@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.15] - 2024-09-15
+
+### Fixed
+- Fix publishing ignoring `.mjs`
+
 ## [v1.1.14] - 2024-09-15
 
 ### Fixed
