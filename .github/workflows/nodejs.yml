@@ -11,6 +11,7 @@ on:
       - release/*
 jobs:
   build:
+    name: Node CI
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -19,6 +20,6 @@ jobs:
         node-version-file: '.nvmrc'
         # `cache: npm` seems to require a `package-lock.json` file
         # cache: npm
-    - run: npm ci --no-audit --fund-no
+    - run: npm i
     - run: npm run build --if-present
     - run: npm test
