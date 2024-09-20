@@ -4,6 +4,7 @@ import { TestRequest } from './TestRequest.js';
 import { HTTPError, HTTPNotImplementedError, HTTPNotFoundError, HTTPInternalServerError } from './error.js';
 import { contextFallback as context } from './context.js';
 
+/* global process */
 const addExtension = (src, ext = 'js') => /\.(c|m)?js$/.test(src) ? src : `${src}.${ext}`;
 
 const ROOT = 'process' in globalThis && process.cwd instanceof Function ? `file://${process.cwd()}/` : globalThis?.document?.baseURI;
