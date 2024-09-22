@@ -7,7 +7,7 @@ import { METHOD_NOT_ALLOWED, NO_CONTENT } from '@shgysk8zer0/consts/status.js';
 import { contextFallback } from './context.js';
 import { NetlifyRequest } from './NetlifyRequest.js';
 import { ACAO, ACAC, ACAM, ACAH, ACRH, ACEH, AUTH, ORIGIN, ALLOW, CONTENT_LENGTH } from './consts.js';
-import { decodeRequestToken } from '@shgysk8zer0/jwk-utils/jwt.js';
+import { decodeRequestToken } from '@shgysk8zer0/jwk-utils';
 
 const NO_BODY_METHODS = ['HEAD', 'GET', 'OPTIONS', 'DELETE'];
 const REDIRECT_CODES = [301, 302, 303, 307, 308];
