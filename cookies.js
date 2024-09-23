@@ -253,6 +253,10 @@ export class Cookie {
 		return parts.join('; ');
 	}
 
+	toJSON() {
+		return this.toString();
+	}
+
 	addToHeaders(headers) {
 		if (! (headers instanceof Headers)) {
 			throw new TypeError('Expected a Headers object.');

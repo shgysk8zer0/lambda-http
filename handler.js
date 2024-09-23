@@ -120,7 +120,7 @@ export function isAllowedOrigin(req, allowOrigins) {
  * Creates a request handler that manages CORS and dispatches to appropriate handlers.
  *
  * @function createHandler
- * @param {Object.<string, function(Request, *): (Response|Promise<Response>)>} handlers - A map of HTTP methods (lowercase) to their corresponding handler functions.
+ * @param {Object.<string, function(NetlifyRequest, *): (Response|Promise<Response>)>} handlers - A map of HTTP methods (lowercase) to their corresponding handler functions.
  * @param {Object} [options] - Optional configuration settings.
  * @param {string|string[]} [options.allowHeaders] - Allowed headers. Can be a string or an array of strings.
  * @param {string|string[]} [options.exposeHeaders] - Headers to expose to the client. Can be a string or an array of strings.
@@ -148,6 +148,7 @@ export function isAllowedOrigin(req, allowOrigins) {
 export function createHandler(handlers, {
 	allowHeaders,
 	exposeHeaders,
+	requiredCookies,
 	allowOrigins,
 	allowCredentials = false,
 	requireCORS = false,
@@ -251,6 +252,8 @@ export function createHandler(handlers, {
 			&& ! isAllowedOrigin(req, allowOrigins)
 		) {
 			throw new HTTPForbiddenError(`Disallowed Origin: ${req.headers.get(ORIGIN)}.`);
+		} else if (Array.isArray(requiredCookies) && ! requiredCookies.every(cookie => req.cookies.has(cookie))) {
+			throw new HTTPBadRequestError('Request is missing required cookies.');
 		} else {
 			const resp = await handlers[req.method.toLowerCase()].call(context, req, context);
 
