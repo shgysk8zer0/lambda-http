@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.19] - 2024-09-22
+
+### Added
+- Add `RequestHandlerTest.shouldRequireCookies()` test
+
+### Changed
+- `NetlifyRequest.prototype.cookies` is now a `Map` set via parsing the `Cookie` header
+
 ## [v1.1.18] - 2024-09-22
 
 ### Fixed
@@ -14,14 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Update dependencies and config
-
-## [v1.1.19] - 2024-09-22
-
-### Added
-- Add `RequestHandlerTest.shouldRequireCookies()` test
-
-### Changed
-- `NetlifyRequest.prototype.cookies` is now a `Map` set via parsing the `Cookie` header
 
 ## [v1.1.18] - 2024-09-22
 
