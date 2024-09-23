@@ -2,16 +2,34 @@ import '@shgysk8zer0/polyfills';
 import { FORM_MULTIPART, FORM_URL_ENCODED, JSON as JSON_MIME, JSON_LD, TEXT } from '@shgysk8zer0/consts/mimes.js';
 const JSON_ALT = 'text/json'; // Alternate JSON Mime-Type
 
-const noCookies = () => console.warn('No Cookies provided by context object.');
-const cookieFallback = Object.freeze({ delete: noCookies, get: noCookies, set: noCookies });
-// let called = false;
+/**
+ * @param {Request} req
+ * @returns {Map<string, string|null>}
+ */
+function getRequestCookies(req) {
+	if (req.headers.has('Cookie')) {
+		const entries = req.headers.get('Cookie').split(';')
+			.map(cookie => {
+				const [name, value = null] = cookie.trim().split('=');
+
+				if (typeof value === 'string') {
+					return [decodeURIComponent(name.trim()), decodeURIComponent(value.trim())];
+				} else {
+					return [decodeURIComponent(name.trim(), null)];
+				}
+			});
+
+		return new Map(entries);
+	} else {
+		return new Map();
+	}
+}
 
 export class NetlifyRequest extends Request {
 	#accept;
 	#acceptsAll;
 	#contentType = '';
 	#cookies;
-	#hasCookies;
 	#context;
 	#contentLength;
 	#destination;
@@ -56,10 +74,8 @@ export class NetlifyRequest extends Request {
 				this.#contentType = this.headers.get('Content-Type').split(';')[0].trim().toLowerCase();
 			}
 
-			this.#context = context;
 			this.#contentLength = this.headers.has('Content-Length') ? parseInt(this.headers.get('Content-Length')) : NaN;
-			this.#hasCookies = context?.cookies?.get instanceof Function;
-			this.#cookies = this.#hasCookies ? context.cookies : cookieFallback;
+			this.#cookies = getRequestCookies(this);
 
 			// The following are not set correctly by requests and some are invalid in constructor, so default to header values
 			this.#destination = this.headers.get('Sec-Fetch-Dest') ?? req.destination;
@@ -223,7 +239,6 @@ export class NetlifyRequest extends Request {
 	}
 
 	clone() {
-		// return new NetlifyRequest(this.#originalRequest.clone(), this.#context);
 		return new NetlifyRequest(super.clone(), this.#context);
 	}
 

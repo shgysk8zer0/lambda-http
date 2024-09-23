@@ -1047,10 +1047,28 @@ export class RequestHandlerTest {
 	static shouldRequireSearchParams(...params) {
 		return (resp, req) => {
 			const searchParams = new URLSearchParams(req.url);
-			const missing = params.filter(header => ! searchParams.has(header));
+			const missing = params.filter(param => ! searchParams.has(param));
 
 			if (resp.ok && missing.length !== 0) {
 				throw new Error(`${req.method} <${req.url}> should require search params: [${missing.join(', ')}] but returned a status of ${resp.status}.`);
+			}
+		};
+	}
+
+	/**
+	 * Checks if a response has specified Cookies.
+	 *
+	 * @param {...string} params The names of the required Cookies.
+	 * @returns {function(Response, Request): void} A middleware function.
+	 *
+	 * @throws {Error} If the search param is missing and the response status is successful.
+	 */
+	static shouldRequireCookies(...cookies) {
+		return (resp, req) => {
+			const missing = cookies.filter(cookie => ! req.cookies.has(cookie));
+
+			if (resp.ok && missing.length !== 0) {
+				throw new Error(`${req.method} <${req.url}> should require cookies: [${missing.join(', ')}] but returned a status of ${resp.status}.`);
 			}
 		};
 	}

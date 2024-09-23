@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.19] - 2024-09-22
+
+### Added
+- Add `RequestHandlerTest.shouldRequireCookies()` test
+
+### Changed
+- `NetlifyRequest.prototype.cookies` is now a `Map` set via parsing the `Cookie` header
+
+## [v1.1.18] - 2024-09-22
+
+### Fixed
+- decodeRequestToken not bundled
+
+## [v1.1.17] - 2024-09-19
+
+### Changed
+- Update dependencies and config
+
 ## [v1.1.16] - 2024-09-15
 
 ### Fixed
