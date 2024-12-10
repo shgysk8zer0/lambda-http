@@ -1,18 +1,24 @@
 import { RequestHandlerTest } from '../RequestHandlerTest.js';
 import { TestRequest } from '../TestRequest.js';
 import { UNAUTHORIZED } from '@shgysk8zer0/consts/status.js';
-import { createOriginAuthToken } from '@shgysk8zer0/jwk-utils/origin-tokens.js';
 import { PRIVATE_KEY } from '../keys.js';
 import { importJWK } from '@shgysk8zer0/jwk-utils/jwk.js';
+import { createJWT } from '@shgysk8zer0/jwk-utils/jwt.js';
 
 const privateKey = await importJWK(PRIVATE_KEY);
-const token = await createOriginAuthToken('https://example.com' , privateKey);
-const url = new URL('http://localhost:8888/api/jwt.js');
+const sub = 'https://example.com';
+const iss = 'http://localhost:8888';
+const iat = Math.floor(Date.now() / 1000);
+const exp = iat + 60;
+// const publicKey = await importJWK(PUBLIC_KEY);
+const token = await createJWT({ sub, iss, iat, exp }, privateKey);
+const url = new URL('/api/jwt.js', iss);
+
 
 const { error } = await RequestHandlerTest.runTests(
 	new RequestHandlerTest(
 		new TestRequest(url, {
-			headers: { origin: 'https://example.com', 'Content-Type': 'application/json' },
+			headers: { origin: sub, 'Content-Type': 'application/json' },
 			method: 'POST',
 			token,
 			searchParams: { test: 'authorized' },
@@ -25,7 +31,7 @@ const { error } = await RequestHandlerTest.runTests(
 			headers: { origin: 'https://example.com', 'Content-Type': 'application/json' },
 			method: 'POST',
 		}),
-		[RequestHandlerTest.shouldHaveStatus(UNAUTHORIZED), RequestHandlerTest.shouldRequireJWT,]
+		[RequestHandlerTest.shouldHaveStatus(UNAUTHORIZED), RequestHandlerTest.shouldRequireJWT]
 	)
 );
 
