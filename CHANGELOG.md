@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.22] - 2024-12-20
+
+### Fixed
+- Update `@shgysk8zer0/jwk-utils` to fix `kid` in exported keys
+
 ## [v1.1.21] - 2024-12-20
 
 ### Added
