@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.21] - 2024-12-20
+
+### Added
+- Add `@shgysk8zer0/geoutils`
+
+### Changed
+- Various version updates
+
+### Fixed
+- Updating `@shgysk8zer0/polyfills` fixes compatibility with CJS / `require()`
+
 ## [v1.1.20] - 2024-12-09
 
 ### Changed
