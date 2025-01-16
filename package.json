@@ -84,7 +84,7 @@
     "@rollup/plugin-terser": "^0.4.4",
     "@shgysk8zer0/eslint-config": "^1.0.1",
     "eslint": "^9.7.0",
-    "netlify-cli": "^17.33.4",
+    "netlify-cli": "^18.0.1",
     "rollup": "^4.19.0"
   },
   "dependencies": {
