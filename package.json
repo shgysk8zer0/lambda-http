@@ -91,6 +91,6 @@
     "@shgysk8zer0/consts": "^1.0.8",
     "@shgysk8zer0/geoutils": "^1.0.0",
     "@shgysk8zer0/jwk-utils": "^1.0.20",
-    "@shgysk8zer0/polyfills": "^0.4.8"
+    "@shgysk8zer0/polyfills": "^0.5.0"
   }
 }
