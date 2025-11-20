@@ -79,7 +79,7 @@
   },
   "homepage": "https://github.com/shgysk8zer0/lambda-http#readme",
   "devDependencies": {
-    "@eslint/compat": "^1.1.1",
+    "@eslint/compat": "^2.0.0",
     "@rollup/plugin-node-resolve": "^16.0.0",
     "@rollup/plugin-terser": "^0.4.4",
     "@shgysk8zer0/eslint-config": "^1.0.1",
