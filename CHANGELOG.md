@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.24] - 2026-03-24
+
+### Changed
+- Update `@shgysk8zer0/jwk-utils` and `netlify-cli`
+
 ## [v1.1.23] - 2026-03-23
 
 ### Changed
