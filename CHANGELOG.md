@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-06-12
+
+### Changed
+- Upgrade to node 26.3.0 / npm 11.16.0
+- Min node version set to 22.12.0
+- Use `npm stage publish`
+- Allow expected scripts
+- Update various dependencies
+
 ## [v1.1.24] - 2026-03-24
 
 ### Changed
