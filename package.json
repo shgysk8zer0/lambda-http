@@ -1,6 +1,6 @@
 {
   "name": "@shgysk8zer0/lambda-http",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A collection of node >= 20 utilities for Netlify Functions and AWS Lambda",
   "keywords": [
     "request",
@@ -82,16 +82,16 @@
     "@eslint/compat": "^2.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
-    "@shgysk8zer0/eslint-config": "^1.0.9",
-    "eslint": "^10.4.1",
+    "@shgysk8zer0/eslint-config": "^1.1.0",
+    "eslint": "^10.5.0",
     "netlify-cli": "^26.1.0",
-    "rollup": "^4.61.1"
+    "rollup": "^4.62.0"
   },
   "dependencies": {
     "@shgysk8zer0/consts": "^1.0.8",
     "@shgysk8zer0/geoutils": "^1.0.6",
     "@shgysk8zer0/jwk-utils": "^1.2.0",
-    "@shgysk8zer0/polyfills": "^0.8.1"
+    "@shgysk8zer0/polyfills": "^0.8.4"
   },
   "allowScripts": {
     "@parcel/watcher@2.5.6": true,
