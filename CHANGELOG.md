@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.2] - 2026-07-14
+
+### Fixed
+- Fix various params in `Cookie`
+
 ## [v1.2.1] - 2026-06-14
 
 ### Added
