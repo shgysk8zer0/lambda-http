@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.4] - 2026-09-08
+
+### Changed
+- Use minified bundle by default in node
+
 ## [v1.2.3] - 2026-07-14
 
 ### Fixed
