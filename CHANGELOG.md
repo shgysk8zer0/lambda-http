@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.8] - 2026-09-10
+
+### Fixed
+- Add `netlify-cli` to approved scripts
+
 ## [v1.2.7] - 2026-09-10
 
 ### Fixed
