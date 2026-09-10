@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.7] - 2026-09-10
+
+### Fixed
+- Generate missing `lambda-http.mjs` bundle
+
 ## [v1.2.6] - 2026-09-08
 
 ### Fixed
