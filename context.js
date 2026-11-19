@@ -1,4 +1,7 @@
-export const contextFallback = Object.freeze({
+/**
+ * @type {import('@netlify/functions').Context}
+ */
+export const contextFallback = {
 	account: { id: '0' },
 	cookies: {
 		delete() {
@@ -34,4 +37,4 @@ export const contextFallback = Object.freeze({
 		name: 'dev-server',
 		url: 'http://localhost:8888'
 	}
-});
+};

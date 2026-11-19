@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.9] - 2026-11-19
+
+### Added
+- Add `waitUntil` as an optional callback to do post response cleanup
+- Add an `AsyncDisposableStack` as `context.asyncStack`
+
 ## [v1.2.8] - 2026-09-10
 
 ### Fixed
